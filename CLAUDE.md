@@ -23,10 +23,12 @@ flake8 rtsp_display/ --count --max-line-length=100 --statistics
 
 ### Ubuntu Deployment
 ```bash
-bash scripts/install.sh          # one-shot install
+bash scripts/install.sh          # one-shot install (packages, systemd service, desktop shortcut)
 sudo systemctl start rtsp-display
 sudo journalctl -u rtsp-display -f
 ```
+
+The installer also creates `~/Desktop/rtsp-display.desktop` for manual launching.
 
 ## Architecture
 
@@ -46,7 +48,8 @@ MQTT command → MQTTClient → root.after() → RTSPDisplayApp → FeedManager 
 | `feed_manager.py` | Spawns and supervises ffplay subprocesses (one `FeedSlot` per grid position) |
 | `mqtt_client.py` | paho-mqtt wrapper; auto-reconnect; heartbeat; last-will |
 | `logo.py` | Animated idle canvas shown when no feeds active |
-| `config.py` | YAML loader with deep-merge defaults |
+| `config.py` | YAML loader with deep-merge defaults and `.env` interpolation |
+| `utils.py` | Shared `redact_url()` and `redact_credentials()` helpers |
 
 ### FeedSlot Supervision
 
@@ -56,7 +59,7 @@ Each `FeedSlot` runs **two background threads**:
 
 ### Linux vs macOS
 
-On Linux, ffplay is embedded into tkinter `Frame` widgets via `ffplay -wid <X11_window_id>`. On macOS (dev mode), ffplay opens a floating window instead — the rest of the app logic is identical.
+On Linux, ffplay is embedded into tkinter `Frame` widgets via `ffplay -wid <X11_window_id> -x <W> -y <H>` (frame dimensions are passed so the video scales to fill). If the running ffplay build doesn't support `-wid`, `FeedSlot` detects the error in stderr, sets `_embedding_failed`, and the watchdog restarts without embedding. On macOS (dev mode), ffplay opens a floating window instead — the rest of the app logic is identical.
 
 ## MQTT API
 
@@ -86,7 +89,7 @@ feeds:
   - "rtsp://${CAM1_USER}:${CAM1_PASS}@192.168.1.101/stream1"
 ```
 
-`config.py` interpolates all `${VAR}` placeholders after loading. MQTT status payloads always redact credentials as `***:***` — the real values never leave the process.
+`config.py` interpolates all `${VAR}` placeholders after loading. MQTT status payloads and all log output always redact credentials as `***:***` via `utils.redact_url()` / `utils.redact_credentials()` — the real values never leave the process.
 
 ## Dependencies
 
