@@ -24,8 +24,8 @@ device_id: rtsp_display_1
 mqtt:
   host: 192.168.1.x          # IP or hostname of your MQTT broker
   port: 1883
-  username: mqtt_user         # Remove or leave blank if no auth
-  password: mqtt_pass         # Remove or leave blank if no auth
+  username: ${MQTT_USER}      # Set in .env — remove if no auth required
+  password: ${MQTT_PASS}      # Set in .env — remove if no auth required
   base_topic: rtsp_display    # Root of all MQTT topics
   heartbeat_interval: 30      # Seconds between heartbeat publishes
 
