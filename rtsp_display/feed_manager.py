@@ -18,6 +18,7 @@ server.
 """
 
 import logging
+import re
 import subprocess
 import sys
 import threading
@@ -41,6 +42,11 @@ def _redact_url(url: str) -> str:
     except Exception:
         pass
     return url
+
+
+def _redact_credentials(text: str) -> str:
+    """Redact any inline credentials from an arbitrary string (e.g. ffplay stderr)."""
+    return re.sub(r"://[^:@/\s]+:[^@/\s]+@", "://***:***@", text)
 
 
 class FeedSlot:
@@ -106,7 +112,7 @@ class FeedSlot:
             self.process.wait()
 
         cmd = self._build_command()
-        logger.info("Slot %d: launching → %s", self.slot_id, " ".join(cmd))
+        logger.info("Slot %d: launching → %s", self.slot_id, _redact_credentials(" ".join(cmd)))
 
         try:
             self.process = subprocess.Popen(
@@ -185,11 +191,12 @@ class FeedSlot:
                 # Transition to playing once we see stream data
                 if self.status == "starting":
                     self._set_status("playing")
-                ll = line.lower()
+                safe_line = _redact_credentials(line)
+                ll = safe_line.lower()
                 if any(kw in ll for kw in ("error", "failed", "invalid", "broken")):
-                    logger.warning("Slot %d ffplay: %s", self.slot_id, line)
+                    logger.warning("Slot %d ffplay: %s", self.slot_id, safe_line)
                 else:
-                    logger.debug("Slot %d ffplay: %s", self.slot_id, line)
+                    logger.debug("Slot %d ffplay: %s", self.slot_id, safe_line)
         except Exception:
             pass  # stderr pipe closed when process exits
 
