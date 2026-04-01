@@ -36,6 +36,8 @@ from typing import Callable, Optional
 
 import paho.mqtt.client as mqtt
 
+from rtsp_display.utils import redact_credentials
+
 logger = logging.getLogger(__name__)
 
 
@@ -155,11 +157,11 @@ class MQTTClient:
 
     def _on_message(self, client, userdata, msg) -> None:
         raw = msg.payload.decode("utf-8", errors="replace")
-        logger.debug("MQTT message on %s: %s", msg.topic, raw)
+        logger.debug("MQTT message on %s: %s", msg.topic, redact_credentials(raw))
         try:
             payload = json.loads(raw)
         except json.JSONDecodeError:
-            logger.warning("Received non-JSON MQTT payload: %r", raw)
+            logger.warning("Received non-JSON MQTT payload: %r", redact_credentials(raw))
             return
         try:
             self._command_handler(payload)

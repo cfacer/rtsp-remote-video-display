@@ -18,35 +18,16 @@ server.
 """
 
 import logging
-import re
 import subprocess
 import sys
 import threading
 import time
 from typing import Callable, Dict, List, Optional
-from urllib.parse import urlparse, urlunparse
+
+from rtsp_display.utils import redact_credentials as _redact_credentials
+from rtsp_display.utils import redact_url as _redact_url
 
 logger = logging.getLogger(__name__)
-
-
-def _redact_url(url: str) -> str:
-    """Return the URL with credentials replaced by '***' for safe logging/publishing."""
-    try:
-        p = urlparse(url)
-        if p.username or p.password:
-            host_part = p.hostname or ""
-            if p.port:
-                host_part += f":{p.port}"
-            redacted = p._replace(netloc=f"***:***@{host_part}")
-            return urlunparse(redacted)
-    except Exception:
-        pass
-    return url
-
-
-def _redact_credentials(text: str) -> str:
-    """Redact any inline credentials from an arbitrary string (e.g. ffplay stderr)."""
-    return re.sub(r"://[^:@/\s]+:[^@/\s]+@", "://***:***@", text)
 
 
 class FeedSlot:
