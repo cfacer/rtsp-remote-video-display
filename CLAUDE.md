@@ -71,6 +71,23 @@ Status payload includes per-slot state: `playing | stalled | restarting | error 
 
 `config.yaml` (gitignored) is created from `config.yaml.example`. Key sections: `mqtt`, `display`, `feeds`, `presets`. Config uses deep-merge: nested dicts overlay on defaults; primitives override.
 
+### Credentials / special characters
+
+Create a `.env` file next to `config.yaml` (also gitignored) with `KEY=value` pairs. Reference them anywhere in `config.yaml` as `${VAR_NAME}`:
+
+```
+# .env
+CAM1_USER=admin
+CAM1_PASS=p@$$w0rd!
+```
+```yaml
+# config.yaml preset
+feeds:
+  - "rtsp://${CAM1_USER}:${CAM1_PASS}@192.168.1.101/stream1"
+```
+
+`config.py` interpolates all `${VAR}` placeholders after loading. MQTT status payloads always redact credentials as `***:***` — the real values never leave the process.
+
 ## Dependencies
 
 - **Runtime**: `paho-mqtt`, `PyYAML`, `python3-tk` (system), `ffmpeg` (system)
