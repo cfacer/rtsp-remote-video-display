@@ -28,14 +28,14 @@ sudo systemctl start rtsp-display
 sudo journalctl -u rtsp-display -f
 ```
 
-The installer also creates `~/Desktop/rtsp-display.desktop` for manual launching.
+The installer creates `~/Desktop/rtsp-display.desktop` for manual launching and installs `libgl1`/`libglib2.0-0` required by `opencv-python`.
 
 ## Architecture
 
 The application is **event-driven** with MQTT as the control plane and tkinter as the display layer.
 
 ```
-MQTT command → MQTTClient → root.after() → RTSPDisplayApp → FeedManager → ffplay subprocess
+MQTT command → MQTTClient → root.after() → RTSPDisplayApp → FeedManager → FeedSlot (OpenCV)
 ```
 
 **Thread model**: MQTT runs on its own thread; all UI mutations must go through `root.after()` to reach the tkinter main thread. This is the key architectural constraint to preserve when modifying `app.py` or `mqtt_client.py`.
@@ -44,22 +44,24 @@ MQTT command → MQTTClient → root.after() → RTSPDisplayApp → FeedManager 
 
 | File | Responsibility |
 |------|---------------|
-| `app.py` | Owns tkinter root; dispatches MQTT commands; builds Frame grid; publishes status |
-| `feed_manager.py` | Spawns and supervises ffplay subprocesses (one `FeedSlot` per grid position) |
+| `app.py` | Owns tkinter root; dispatches MQTT commands; builds Canvas grid; publishes status |
+| `feed_manager.py` | Manages `FeedSlot` instances; OpenCV RTSP capture + PIL rendering into Canvas widgets |
 | `mqtt_client.py` | paho-mqtt wrapper; auto-reconnect; heartbeat; last-will |
 | `logo.py` | Animated idle canvas shown when no feeds active |
 | `config.py` | YAML loader with deep-merge defaults and `.env` interpolation |
 | `utils.py` | Shared `redact_url()` and `redact_credentials()` helpers |
 
-### FeedSlot Supervision
+### FeedSlot — Capture and Rendering
 
-Each `FeedSlot` runs **two background threads**:
-- **`_monitor_stderr`** – reads ffplay stderr to update `last_activity` timestamp
-- **`_watchdog`** – polls every 5s; detects hard crashes (exit code) and soft stalls (stderr silence >30s); triggers auto-restart
+Each `FeedSlot` owns one `tk.Canvas` widget and runs:
+- **Background thread** (`_capture_loop`) — `cv2.VideoCapture` reads RTSP frames continuously, converts to PIL Images, stores in `_latest_frame` behind a lock. Detects stalls when `cap.read()` fails after `stall_timeout` seconds; reconnects after `reconnect_delay`.
+- **Main-thread display loop** (`_schedule_display`) — called via `root.after(33ms)` at ~30fps; resizes the latest PIL Image to the canvas dimensions and renders it via `ImageTk.PhotoImage`. PhotoImage reference is kept on `self._photo` to prevent GC.
 
-### Linux vs macOS
+All video renders inside the single tkinter window — no external subprocess windows.
 
-On Linux, ffplay is embedded into tkinter `Frame` widgets via `ffplay -wid <X11_window_id> -x <W> -y <H>` (frame dimensions are passed so the video scales to fill). If the running ffplay build doesn't support `-wid`, `FeedSlot` detects the error in stderr, sets `_embedding_failed`, and the watchdog restarts without embedding. On macOS (dev mode), ffplay opens a floating window instead — the rest of the app logic is identical.
+### Platform Notes
+
+The OpenCV approach works identically on Linux and macOS. `OPENCV_FFMPEG_CAPTURE_OPTIONS` is set to configure RTSP transport (tcp/udp) from config before each capture is opened.
 
 ## MQTT API
 
@@ -93,6 +95,6 @@ feeds:
 
 ## Dependencies
 
-- **Runtime**: `paho-mqtt`, `PyYAML`, `python3-tk` (system), `ffmpeg` (system)
+- **Runtime**: `paho-mqtt`, `PyYAML`, `opencv-python`, `Pillow`, `python3-tk` (system), `ffmpeg` (system), `libgl1`/`libglib2.0-0` (system, Ubuntu only)
 - **Linting**: `flake8` (max line length 100)
 - **No test suite** — CI runs only flake8 linting via `.github/workflows/lint.yml`
