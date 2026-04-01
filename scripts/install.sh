@@ -18,11 +18,11 @@ set -euo pipefail
 INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SERVICE_SRC="$INSTALL_DIR/scripts/rtsp-display.service"
 SERVICE_DST="/etc/systemd/system/rtsp-display.service"
-DESKTOP_DST="$INSTALL_HOME/Desktop/rtsp-display.desktop"
 
 # Detect the logged-in user (works even when run via sudo)
 INSTALL_USER="${SUDO_USER:-$USER}"
 INSTALL_HOME=$(eval echo "~$INSTALL_USER")
+DESKTOP_DST="$INSTALL_HOME/Desktop/rtsp-display.desktop"
 
 echo ""
 echo "╔══════════════════════════════════════════════════════╗"
