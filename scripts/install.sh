@@ -11,12 +11,14 @@
 #    3. Installs Python dependencies
 #    4. Copies config.yaml.example → config.yaml (if absent)
 #    5. Installs a systemd service that starts the app on login
+#    6. Creates a desktop shortcut for manual launching
 # ==============================================================
 set -euo pipefail
 
 INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SERVICE_SRC="$INSTALL_DIR/scripts/rtsp-display.service"
 SERVICE_DST="/etc/systemd/system/rtsp-display.service"
+DESKTOP_DST="$INSTALL_HOME/Desktop/rtsp-display.desktop"
 
 # Detect the logged-in user (works even when run via sudo)
 INSTALL_USER="${SUDO_USER:-$USER}"
@@ -82,6 +84,25 @@ sudo bash -c "sed \
 sudo systemctl daemon-reload
 sudo systemctl enable rtsp-display.service
 
+# ── 6. Desktop shortcut ───────────────────────────────────────
+echo "▶ Creating desktop shortcut…"
+mkdir -p "$INSTALL_HOME/Desktop"
+cat > "$DESKTOP_DST" <<EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=RTSP Display
+Comment=Launch the RTSP Remote Video Display
+Exec=python3 -m rtsp_display.main --config $INSTALL_DIR/config.yaml
+WorkingDirectory=$INSTALL_DIR
+Terminal=false
+Icon=video-display
+EOF
+chown "$INSTALL_USER:$INSTALL_USER" "$DESKTOP_DST"
+chmod +x "$DESKTOP_DST"
+# Mark as trusted so GNOME allows launching without prompting
+sudo -u "$INSTALL_USER" gio set "$DESKTOP_DST" metadata::trusted true 2>/dev/null || true
+
 echo ""
 echo "╔══════════════════════════════════════════════════════╗"
 echo "║               Installation complete!                 ║"
@@ -91,6 +112,9 @@ echo "║  1. Edit config.yaml and set your MQTT broker IP.    ║"
 echo "║  2. Add your camera presets.                          ║"
 echo "║  3. Reboot (or start the service manually):           ║"
 echo "║       sudo systemctl start rtsp-display               ║"
+echo "║                                                       ║"
+echo "║  Desktop shortcut created at:                         ║"
+echo "║    ~/Desktop/rtsp-display.desktop                     ║"
 echo "║                                                       ║"
 echo "║  Logs:  sudo journalctl -u rtsp-display -f            ║"
 echo "║  Test:  python3 -m rtsp_display.main --debug          ║"
