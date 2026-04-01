@@ -144,7 +144,6 @@ class LogoAnimation:
 
         # ---- Viewfinder bump ----
         bump_w = cam_w // 4
-        bump_h = cam_h // 7
         bump_x = cx - bump_w // 2
         self._canvas.create_rectangle(
             bump_x, y, bump_x + bump_w, body_top + 2,
