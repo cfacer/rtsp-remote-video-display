@@ -44,6 +44,7 @@ class FeedSlot:
         self.slot_id = slot_id
         self.url = url
         self.window_id = window_id       # X11 window ID for embedding (Linux only)
+        self.frame_size: Optional[tuple] = None  # (width, height) of the tkinter frame
         self._cfg = feed_config or {}
         self._on_status_change = on_status_change
 
@@ -148,8 +149,9 @@ class FeedSlot:
         ]
 
         if self.window_id and sys.platform.startswith("linux") and not self._embedding_failed:
-            # Embed into the tkinter frame's X11 window
             cmd += ["-wid", str(self.window_id)]
+            if self.frame_size:
+                cmd += ["-x", str(self.frame_size[0]), "-y", str(self.frame_size[1])]
         # On macOS, or if X11 embedding is unsupported, ffplay opens its own floating window
 
         cmd += extra_args
@@ -269,12 +271,14 @@ class FeedManager:
         self,
         urls: List[str],
         window_ids: Optional[List[Optional[int]]] = None,
+        frame_sizes: Optional[List[Optional[tuple]]] = None,
     ) -> None:
         """Stop all current slots and start new ones.
 
         Args:
             urls: Ordered list of RTSP URLs.  Empty string / None → skip slot.
             window_ids: Parallel list of X11 window IDs (Linux) or None.
+            frame_sizes: Parallel list of (width, height) tuples for each frame.
         """
         self.clear()
         feed_cfg = self._config.get("feeds", default={})
@@ -290,6 +294,8 @@ class FeedManager:
                 feed_config=feed_cfg,
                 on_status_change=self._on_status_change,
             )
+            if frame_sizes and idx < len(frame_sizes) and frame_sizes[idx]:
+                slot.frame_size = frame_sizes[idx]
             slot.start()
             self._slots[idx] = slot
             logger.info("Feed slot %d started: %s", idx, _redact_url(url))

@@ -219,15 +219,18 @@ class RTSPDisplayApp:
         # Realise all windows so winfo_id() returns valid XIDs
         self.root.update()
 
-        # Collect X11 window IDs (Linux) or None (macOS dev mode)
+        # Collect X11 window IDs and frame dimensions (Linux) or None (macOS dev mode)
         window_ids: List[Optional[int]] = []
+        frame_sizes: List[Optional[tuple]] = []
         for frame in self._feed_frames:
             if sys.platform.startswith("linux"):
                 window_ids.append(frame.winfo_id())
+                frame_sizes.append((frame.winfo_width(), frame.winfo_height()))
             else:
                 window_ids.append(None)
+                frame_sizes.append(None)
 
-        self._feeds.set_feeds(urls, window_ids=window_ids)
+        self._feeds.set_feeds(urls, window_ids=window_ids, frame_sizes=frame_sizes)
         self._publish_status("playing")
 
     def _build_feed_frames(self, cols: int, rows: int) -> None:
