@@ -56,6 +56,7 @@ class FeedSlot:
         self._running: bool = False
         self._watchdog_thread: Optional[threading.Thread] = None
         self._stderr_thread: Optional[threading.Thread] = None
+        self._embedding_failed: bool = False  # set if ffplay rejects -wid
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -146,10 +147,10 @@ class FeedSlot:
             "-autoexit",                    # exit when stream ends naturally
         ]
 
-        if self.window_id and sys.platform.startswith("linux"):
+        if self.window_id and sys.platform.startswith("linux") and not self._embedding_failed:
             # Embed into the tkinter frame's X11 window
             cmd += ["-wid", str(self.window_id)]
-        # On macOS (dev mode) ffplay opens its own floating window
+        # On macOS, or if X11 embedding is unsupported, ffplay opens its own floating window
 
         cmd += extra_args
         cmd += [self.url]
@@ -174,7 +175,14 @@ class FeedSlot:
                     self._set_status("playing")
                 safe_line = _redact_credentials(line)
                 ll = safe_line.lower()
-                if any(kw in ll for kw in ("error", "failed", "invalid", "broken")):
+                # Detect ffplay builds that don't support X11 window embedding
+                if "option" in ll and "wid" in ll and "not found" in ll:
+                    logger.warning(
+                        "Slot %d: ffplay does not support -wid (X11 embedding); "
+                        "restarting without embedding", self.slot_id
+                    )
+                    self._embedding_failed = True
+                elif any(kw in ll for kw in ("error", "failed", "invalid", "broken")):
                     logger.warning("Slot %d ffplay: %s", self.slot_id, safe_line)
                 else:
                     logger.debug("Slot %d ffplay: %s", self.slot_id, safe_line)
