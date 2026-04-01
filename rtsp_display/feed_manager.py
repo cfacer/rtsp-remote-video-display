@@ -1,242 +1,84 @@
-"""Feed Manager — spawns and supervises ffplay subprocesses.
+"""Feed Manager — captures RTSP streams and renders into tkinter Canvas widgets.
 
-Each *FeedSlot* manages one ffplay process.  It monitors the process
-for two failure modes:
-
-1. **Hard crash** — the process exits unexpectedly.  Detected via
-   ``process.poll()``.
-2. **Soft stall** — the process is running but the stream is frozen.
-   Detected by watching ffplay's stderr output; ffplay emits periodic
-   progress lines (e.g. A-V sync info) when the stream is live.  If
-   no output arrives within *stall_timeout* seconds the slot is
-   considered stalled and the process is restarted.
-
-On Linux the video is embedded directly into a tkinter Frame via the
-X11 ``-wid`` flag.  On macOS (development mode) ffplay opens its own
-window so the developer can observe the stream without needing an X
-server.
+Each FeedSlot runs a background capture thread (OpenCV/RTSP) and a
+tkinter after() display loop that converts frames to PhotoImages and
+paints them onto the slot's Canvas.  All rendering stays inside the
+single tkinter window — no external subprocess windows.
 """
 
 import logging
-import subprocess
-import sys
+import os
 import threading
 import time
 from typing import Callable, Dict, List, Optional
 
-from rtsp_display.utils import redact_credentials as _redact_credentials
-from rtsp_display.utils import redact_url as _redact_url
+import cv2
+from PIL import Image, ImageTk
+
+from rtsp_display.utils import redact_url
 
 logger = logging.getLogger(__name__)
 
+# Pillow >=10 moved resampling filters to Image.Resampling
+_RESAMPLE = getattr(getattr(Image, "Resampling", Image), "BILINEAR", 1)
+
 
 class FeedSlot:
-    """Manages one ffplay subprocess for a single display slot."""
+    """Manages one RTSP stream displayed on a tkinter Canvas."""
+
+    DISPLAY_INTERVAL_MS = 33  # ~30 fps display refresh
 
     def __init__(
         self,
         slot_id: int,
         url: str,
-        window_id: Optional[int] = None,
+        canvas,                                    # tk.Canvas
+        root,                                      # tk.Tk
         feed_config: Optional[dict] = None,
         on_status_change: Optional[Callable] = None,
     ) -> None:
         self.slot_id = slot_id
         self.url = url
-        self.window_id = window_id       # X11 window ID for embedding (Linux only)
-        self.frame_size: Optional[tuple] = None  # (width, height) of the tkinter frame
+        self.canvas = canvas
+        self.root = root
         self._cfg = feed_config or {}
         self._on_status_change = on_status_change
 
-        self.process: Optional[subprocess.Popen] = None
-        self.status: str = "stopped"    # stopped | starting | playing | stalled | error
+        self.status: str = "stopped"
         self.restart_count: int = 0
         self.started_at: Optional[float] = None
-        self.last_activity: Optional[float] = None
 
         self._running: bool = False
-        self._watchdog_thread: Optional[threading.Thread] = None
-        self._stderr_thread: Optional[threading.Thread] = None
-        self._embedding_failed: bool = False  # set if ffplay rejects -wid
+        self._capture_thread: Optional[threading.Thread] = None
+        self._latest_frame: Optional[Image.Image] = None
+        self._frame_lock = threading.Lock()
+        self._photo: Optional[ImageTk.PhotoImage] = None   # prevent GC
+        self._canvas_image_id: Optional[int] = None
+        self._after_id: Optional[str] = None
 
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
     def start(self) -> None:
-        """Start the ffplay process and supervision threads."""
         self._running = True
-        self._launch()
+        self.started_at = time.time()
+        self._set_status("starting")
+        self._capture_thread = threading.Thread(
+            target=self._capture_loop, daemon=True
+        )
+        self._capture_thread.start()
+        self._schedule_display()
 
     def stop(self) -> None:
-        """Terminate the ffplay process and stop supervision."""
         self._running = False
-        self._set_status("stopped")
-        if self.process and self.process.poll() is None:
-            logger.info("Slot %d: terminating ffplay", self.slot_id)
-            self.process.terminate()
+        if self._after_id:
             try:
-                self.process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                logger.warning("Slot %d: force-killing ffplay", self.slot_id)
-                self.process.kill()
-                self.process.wait()
-        self.process = None
-
-    # ------------------------------------------------------------------
-    # Internal — process management
-    # ------------------------------------------------------------------
-
-    def _launch(self) -> None:
-        """(Re)launch the ffplay subprocess."""
-        # Kill any existing process first
-        if self.process and self.process.poll() is None:
-            self.process.kill()
-            self.process.wait()
-
-        cmd = self._build_command()
-        logger.info("Slot %d: launching → %s", self.slot_id, _redact_credentials(" ".join(cmd)))
-
-        try:
-            self.process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-                text=True,
-                bufsize=1,
-            )
-            self.started_at = time.time()
-            self.last_activity = time.time()
-            self._set_status("starting")
-
-            # Stderr monitor — updates last_activity so the watchdog can
-            # distinguish a live stream from a frozen one
-            self._stderr_thread = threading.Thread(
-                target=self._monitor_stderr, daemon=True
-            )
-            self._stderr_thread.start()
-
-            # Watchdog — restarts the slot on crash or stall
-            if self._watchdog_thread is None or not self._watchdog_thread.is_alive():
-                self._watchdog_thread = threading.Thread(
-                    target=self._watchdog, daemon=True
-                )
-                self._watchdog_thread.start()
-
-        except FileNotFoundError:
-            logger.error(
-                "Slot %d: 'ffplay' not found.  Install ffmpeg: sudo apt install ffmpeg",
-                self.slot_id,
-            )
-            self._set_status("error")
-        except Exception as exc:
-            logger.error("Slot %d: failed to start ffplay: %s", self.slot_id, exc)
-            self._set_status("error")
-
-    def _build_command(self) -> List[str]:
-        rtsp_transport = self._cfg.get("rtsp_transport", "tcp")
-        extra_args: List[str] = self._cfg.get("ffplay_extra_args", [])
-
-        cmd = [
-            "ffplay",
-            "-rtsp_transport", rtsp_transport,
-            "-timeout", "10000000",         # 10 s in µs
-            # Stderr verbosity — needed for stall detection
-            "-loglevel", "info",
-            # UI flags
-            "-noborder",
-            "-autoexit",                    # exit when stream ends naturally
-        ]
-
-        if self.window_id and sys.platform.startswith("linux") and not self._embedding_failed:
-            cmd += ["-wid", str(self.window_id)]
-            if self.frame_size:
-                cmd += ["-x", str(self.frame_size[0]), "-y", str(self.frame_size[1])]
-        # On macOS, or if X11 embedding is unsupported, ffplay opens its own floating window
-
-        cmd += extra_args
-        cmd += [self.url]
-        return cmd
-
-    # ------------------------------------------------------------------
-    # Internal — monitoring
-    # ------------------------------------------------------------------
-
-    def _monitor_stderr(self) -> None:
-        """Read stderr lines from ffplay; update last_activity on any output."""
-        if not self.process or not self.process.stderr:
-            return
-        try:
-            for line in self.process.stderr:
-                line = line.rstrip()
-                if not line:
-                    continue
-                self.last_activity = time.time()
-                # Transition to playing once we see stream data
-                if self.status == "starting":
-                    self._set_status("playing")
-                safe_line = _redact_credentials(line)
-                ll = safe_line.lower()
-                # Detect ffplay builds that don't support X11 window embedding
-                if "option" in ll and "wid" in ll and "not found" in ll:
-                    logger.warning(
-                        "Slot %d: ffplay does not support -wid (X11 embedding); "
-                        "restarting without embedding", self.slot_id
-                    )
-                    self._embedding_failed = True
-                elif any(kw in ll for kw in ("error", "failed", "invalid", "broken")):
-                    logger.warning("Slot %d ffplay: %s", self.slot_id, safe_line)
-                else:
-                    logger.debug("Slot %d ffplay: %s", self.slot_id, safe_line)
-        except Exception:
-            pass  # stderr pipe closed when process exits
-
-    def _watchdog(self) -> None:
-        """Poll the process every 5 s; restart on crash or stall."""
-        stall_timeout: float = float(self._cfg.get("stall_timeout", 30))
-        reconnect_delay: float = float(self._cfg.get("reconnect_delay", 5))
-
-        while self._running:
-            time.sleep(5)
-            if not self._running:
-                break
-
-            # --- Hard crash ---
-            if self.process and self.process.poll() is not None:
-                exit_code = self.process.returncode
-                logger.warning(
-                    "Slot %d: ffplay exited (code %d); restarting in %.0f s…",
-                    self.slot_id, exit_code, reconnect_delay,
-                )
-                self.restart_count += 1
-                self._set_status("restarting")
-                time.sleep(reconnect_delay)
-                if self._running:
-                    self._launch()
-                continue
-
-            # --- Soft stall ---
-            if self.last_activity and (time.time() - self.last_activity) > stall_timeout:
-                logger.warning(
-                    "Slot %d: stall detected (no output for %.0f s); restarting…",
-                    self.slot_id, stall_timeout,
-                )
-                self.restart_count += 1
-                self._set_status("stalled")
-                if self.process and self.process.poll() is None:
-                    self.process.kill()
-                    self.process.wait()
-                time.sleep(reconnect_delay)
-                if self._running:
-                    self._launch()
-
-    def _set_status(self, status: str) -> None:
-        self.status = status
-        if self._on_status_change:
-            try:
-                self._on_status_change(self.slot_id, status)
+                self.root.after_cancel(self._after_id)
             except Exception:
                 pass
+            self._after_id = None
+        self._set_status("stopped")
 
     # ------------------------------------------------------------------
     # Reporting
@@ -245,63 +87,153 @@ class FeedSlot:
     def get_info(self) -> dict:
         return {
             "slot": self.slot_id,
-            "url": _redact_url(self.url),
+            "url": redact_url(self.url),
             "status": self.status,
             "restart_count": self.restart_count,
             "uptime_s": int(time.time() - self.started_at) if self.started_at else 0,
         }
+
+    # ------------------------------------------------------------------
+    # Internal
+    # ------------------------------------------------------------------
+
+    def _set_status(self, status: str) -> None:
+        if self.status != status:
+            self.status = status
+            if self._on_status_change:
+                self._on_status_change(self.slot_id, status)
+
+    def _capture_loop(self) -> None:
+        """Background thread: opens the RTSP stream and reads frames continuously."""
+        reconnect_delay = float(self._cfg.get("reconnect_delay", 5))
+        stall_timeout = float(self._cfg.get("stall_timeout", 30))
+        rtsp_transport = self._cfg.get("rtsp_transport", "tcp")
+
+        # Configure RTSP transport for the OpenCV/FFMPEG backend
+        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = f"rtsp_transport;{rtsp_transport}"
+
+        while self._running:
+            cap = None
+            try:
+                logger.info(
+                    "Slot %d: opening %s", self.slot_id, redact_url(self.url)
+                )
+                cap = cv2.VideoCapture(self.url, cv2.CAP_FFMPEG)
+                try:
+                    cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 10_000)
+                    cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, int(stall_timeout * 1_000))
+                except Exception:
+                    pass  # older OpenCV builds may not support these props
+
+                if not cap.isOpened():
+                    raise RuntimeError("Failed to open RTSP stream")
+
+                self._set_status("playing")
+                last_frame_time = time.time()
+
+                while self._running:
+                    ret, frame = cap.read()
+                    if not ret:
+                        elapsed = time.time() - last_frame_time
+                        if elapsed > stall_timeout:
+                            logger.warning(
+                                "Slot %d: stall detected (%.0f s without a frame)",
+                                self.slot_id, elapsed,
+                            )
+                            self._set_status("stalled")
+                        break
+
+                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    with self._frame_lock:
+                        self._latest_frame = Image.fromarray(frame_rgb)
+                    last_frame_time = time.time()
+
+            except Exception as exc:
+                logger.warning("Slot %d: capture error: %s", self.slot_id, exc)
+            finally:
+                if cap is not None:
+                    cap.release()
+
+            if self._running:
+                self.restart_count += 1
+                self._set_status("restarting")
+                logger.info(
+                    "Slot %d: reconnecting in %.0f s (attempt %d)…",
+                    self.slot_id, reconnect_delay, self.restart_count,
+                )
+                time.sleep(reconnect_delay)
+
+    def _schedule_display(self) -> None:
+        """Main-thread loop: renders the latest captured frame onto the Canvas."""
+        if not self._running:
+            return
+
+        with self._frame_lock:
+            img = self._latest_frame
+
+        if img is not None:
+            try:
+                w = self.canvas.winfo_width()
+                h = self.canvas.winfo_height()
+                if w > 1 and h > 1:
+                    img_resized = img.resize((w, h), _RESAMPLE)
+                    photo = ImageTk.PhotoImage(img_resized)
+                    if self._canvas_image_id is None:
+                        self._canvas_image_id = self.canvas.create_image(
+                            0, 0, anchor="nw", image=photo
+                        )
+                    else:
+                        self.canvas.itemconfig(self._canvas_image_id, image=photo)
+                    self._photo = photo  # keep reference — prevents GC
+            except Exception:
+                pass  # canvas may be destroyed during layout transitions
+
+        self._after_id = self.root.after(self.DISPLAY_INTERVAL_MS, self._schedule_display)
 
 
 # ---------------------------------------------------------------------------
 
 
 class FeedManager:
-    """Manages the full set of active FeedSlots."""
+    """Manages a collection of FeedSlots."""
 
     def __init__(self, config, on_status_change: Optional[Callable] = None) -> None:
         self._config = config
         self._on_status_change = on_status_change
         self._slots: Dict[int, FeedSlot] = {}
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
     def set_feeds(
         self,
         urls: List[str],
-        window_ids: Optional[List[Optional[int]]] = None,
-        frame_sizes: Optional[List[Optional[tuple]]] = None,
+        canvases: List,    # List[tk.Canvas]
+        root,              # tk.Tk
     ) -> None:
         """Stop all current slots and start new ones.
 
         Args:
-            urls: Ordered list of RTSP URLs.  Empty string / None → skip slot.
-            window_ids: Parallel list of X11 window IDs (Linux) or None.
-            frame_sizes: Parallel list of (width, height) tuples for each frame.
+            urls:     Ordered list of RTSP URLs.  Empty string → skip slot.
+            canvases: Parallel list of tk.Canvas widgets to render into.
+            root:     The tkinter root window (for after() scheduling).
         """
         self.clear()
         feed_cfg = self._config.get("feeds", default={})
 
         for idx, url in enumerate(urls):
-            if not url:
+            if not url or idx >= len(canvases):
                 continue
-            wid = (window_ids[idx] if window_ids and idx < len(window_ids) else None)
             slot = FeedSlot(
                 slot_id=idx,
                 url=url,
-                window_id=wid,
+                canvas=canvases[idx],
+                root=root,
                 feed_config=feed_cfg,
                 on_status_change=self._on_status_change,
             )
-            if frame_sizes and idx < len(frame_sizes) and frame_sizes[idx]:
-                slot.frame_size = frame_sizes[idx]
             slot.start()
             self._slots[idx] = slot
-            logger.info("Feed slot %d started: %s", idx, _redact_url(url))
+            logger.info("Feed slot %d started: %s", idx, redact_url(url))
 
     def clear(self) -> None:
-        """Stop and remove all active slots."""
         for slot in list(self._slots.values()):
             slot.stop()
         self._slots.clear()

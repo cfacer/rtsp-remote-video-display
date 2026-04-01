@@ -1,7 +1,6 @@
 """Main application — owns the tkinter root, logo, layout frames, and orchestration."""
 
 import logging
-import sys
 import time
 import tkinter as tk
 from typing import Dict, List, Optional
@@ -216,25 +215,14 @@ class RTSPDisplayApp:
         self._destroy_feed_container()
         self._build_feed_frames(cols, rows)
 
-        # Realise all windows so winfo_id() returns valid XIDs
+        # Realise canvases so winfo_width/height return valid dimensions
         self.root.update()
 
-        # Collect X11 window IDs and frame dimensions (Linux) or None (macOS dev mode)
-        window_ids: List[Optional[int]] = []
-        frame_sizes: List[Optional[tuple]] = []
-        for frame in self._feed_frames:
-            if sys.platform.startswith("linux"):
-                window_ids.append(frame.winfo_id())
-                frame_sizes.append((frame.winfo_width(), frame.winfo_height()))
-            else:
-                window_ids.append(None)
-                frame_sizes.append(None)
-
-        self._feeds.set_feeds(urls, window_ids=window_ids, frame_sizes=frame_sizes)
+        self._feeds.set_feeds(urls, canvases=self._feed_frames, root=self.root)
         self._publish_status("playing")
 
     def _build_feed_frames(self, cols: int, rows: int) -> None:
-        """Create a cols×rows grid of dark frames inside the root window."""
+        """Create a cols×rows grid of Canvas widgets inside the root window."""
         self._feed_container = tk.Frame(self.root, bg="black")
         self._feed_container.pack(fill=tk.BOTH, expand=True)
         self._feed_frames = []
@@ -246,14 +234,14 @@ class RTSPDisplayApp:
 
         for r in range(rows):
             for c in range(cols):
-                frame = tk.Frame(
+                canvas = tk.Canvas(
                     self._feed_container,
                     bg="#050505",
                     bd=0,
-                    relief=tk.FLAT,
+                    highlightthickness=0,
                 )
-                frame.grid(row=r, column=c, sticky="nsew", padx=1, pady=1)
-                self._feed_frames.append(frame)
+                canvas.grid(row=r, column=c, sticky="nsew", padx=1, pady=1)
+                self._feed_frames.append(canvas)
 
     def _destroy_feed_container(self) -> None:
         if self._feed_container:

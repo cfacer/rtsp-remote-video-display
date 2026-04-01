@@ -41,7 +41,9 @@ sudo apt-get install -y \
     python3-pip \
     python3-tk \
     ffmpeg \
-    git
+    git \
+    libgl1 \
+    libglib2.0-0
 
 # ── 2. Force X11 (disable Wayland) ────────────────────────────
 # ffplay's -wid embedding requires X11.  If GDM3 is present we
