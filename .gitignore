@@ -12,8 +12,10 @@ build/
 venv/
 env/
 
-# Config (may contain credentials)
+# Config and credentials (may contain sensitive values)
 config.yaml
+.env
+*.env
 
 # IDE / OS
 .DS_Store

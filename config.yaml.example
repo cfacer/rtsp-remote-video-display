@@ -1,6 +1,19 @@
 # ============================================================
 #  RTSP Remote Video Display — configuration
 #  Copy this file to config.yaml and fill in your values.
+#
+#  Credentials with special characters
+#  ------------------------------------
+#  Create a .env file next to config.yaml (it is gitignored):
+#
+#    CAM1_USER=admin
+#    CAM1_PASS=p@$$w0rd!
+#    CAM2_USER=viewer
+#    CAM2_PASS=another#pass
+#
+#  Then reference them in URLs with ${VAR_NAME}:
+#
+#    "rtsp://${CAM1_USER}:${CAM1_PASS}@192.168.1.101/stream1"
 # ============================================================
 
 # Unique identifier for this display device.
@@ -36,12 +49,12 @@ presets:
   front_cameras:
     layout: "2x2"
     feeds:
-      - "rtsp://admin:password@192.168.1.101/stream1"
-      - "rtsp://admin:password@192.168.1.102/stream1"
-      - "rtsp://admin:password@192.168.1.103/stream1"
-      - "rtsp://admin:password@192.168.1.104/stream1"
+      - "rtsp://${CAM_USER}:${CAM_PASS}@192.168.1.101/stream1"
+      - "rtsp://${CAM_USER}:${CAM_PASS}@192.168.1.102/stream1"
+      - "rtsp://${CAM_USER}:${CAM_PASS}@192.168.1.103/stream1"
+      - "rtsp://${CAM_USER}:${CAM_PASS}@192.168.1.104/stream1"
 
   main_entrance:
     layout: "1x1"
     feeds:
-      - "rtsp://admin:password@192.168.1.101/stream2"
+      - "rtsp://${CAM_USER}:${CAM_PASS}@192.168.1.101/stream2"

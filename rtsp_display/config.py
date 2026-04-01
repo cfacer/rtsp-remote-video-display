@@ -1,6 +1,7 @@
 """Configuration loader with deep-merge defaults."""
 import os
 import logging
+import re
 import yaml
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,48 @@ DEFAULTS: dict = {
 }
 
 
+def _load_env_file(path: str) -> dict:
+    """Parse a .env file and return a dict of variable names to values.
+
+    Supports:
+      KEY=value
+      KEY="value with spaces"
+      KEY='value'
+      # comments and blank lines ignored
+    """
+    env: dict = {}
+    if not os.path.exists(path):
+        return env
+    with open(path, "r") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+                value = value[1:-1]
+            env[key] = value
+    return env
+
+
+def _interpolate(obj, env: dict):
+    """Recursively replace ``${VAR}`` placeholders in all string values."""
+    if isinstance(obj, str):
+        def _sub(m):
+            var = m.group(1)
+            if var not in env:
+                logger.warning("Config references undefined env var: %s", var)
+            return env.get(var, m.group(0))
+        return re.sub(r"\$\{([^}]+)\}", _sub, obj)
+    if isinstance(obj, dict):
+        return {k: _interpolate(v, env) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_interpolate(item, env) for item in obj]
+    return obj
+
+
 class Config:
     """Loads and merges YAML config over built-in defaults."""
 
@@ -44,6 +87,13 @@ class Config:
             logger.info("Loaded config from %s", path)
         else:
             logger.warning("Config file %s not found — using defaults.", path)
+
+        # Load .env from the same directory as config.yaml and interpolate
+        env_path = os.path.join(os.path.dirname(os.path.abspath(path)), ".env")
+        env = _load_env_file(env_path)
+        if env:
+            logger.info("Loaded %d credential(s) from %s", len(env), env_path)
+        self._data = _interpolate(self._data, env)
 
     # ------------------------------------------------------------------
     # Public helpers

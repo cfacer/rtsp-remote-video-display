@@ -23,8 +23,24 @@ import sys
 import threading
 import time
 from typing import Callable, Dict, List, Optional
+from urllib.parse import urlparse, urlunparse
 
 logger = logging.getLogger(__name__)
+
+
+def _redact_url(url: str) -> str:
+    """Return the URL with credentials replaced by '***' for safe logging/publishing."""
+    try:
+        p = urlparse(url)
+        if p.username or p.password:
+            host_part = p.hostname or ""
+            if p.port:
+                host_part += f":{p.port}"
+            redacted = p._replace(netloc=f"***:***@{host_part}")
+            return urlunparse(redacted)
+    except Exception:
+        pass
+    return url
 
 
 class FeedSlot:
@@ -231,7 +247,7 @@ class FeedSlot:
     def get_info(self) -> dict:
         return {
             "slot": self.slot_id,
-            "url": self.url,
+            "url": _redact_url(self.url),
             "status": self.status,
             "restart_count": self.restart_count,
             "uptime_s": int(time.time() - self.started_at) if self.started_at else 0,
@@ -280,7 +296,7 @@ class FeedManager:
             )
             slot.start()
             self._slots[idx] = slot
-            logger.info("Feed slot %d started: %s", idx, url)
+            logger.info("Feed slot %d started: %s", idx, _redact_url(url))
 
     def clear(self) -> None:
         """Stop and remove all active slots."""
