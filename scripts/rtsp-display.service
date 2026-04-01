@@ -1,0 +1,33 @@
+# systemd service for RTSP Remote Video Display
+# Installed by:  scripts/install.sh
+# Placeholders {{INSTALL_DIR}}, {{USER}}, {{HOME}} are substituted at install time.
+
+[Unit]
+Description=RTSP Remote Video Display
+Documentation=https://github.com/YOUR_GITHUB_USERNAME/rtsp-remote-video-display
+# Wait for the desktop session and network before starting
+After=graphical-session.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{USER}}
+WorkingDirectory={{INSTALL_DIR}}
+
+# Force X11 so ffplay can embed into tkinter frames via -wid
+Environment=DISPLAY=:0
+Environment=GDK_BACKEND=x11
+Environment=XAUTHORITY={{HOME}}/.Xauthority
+
+ExecStart=/usr/bin/python3 -m rtsp_display.main --config {{INSTALL_DIR}}/config.yaml
+
+# Restart automatically if the process crashes
+Restart=always
+RestartSec=10
+
+# Write logs to stdout so journalctl -u rtsp-display picks them up
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=graphical-session.target

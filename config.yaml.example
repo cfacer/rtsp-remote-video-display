@@ -1,0 +1,47 @@
+# ============================================================
+#  RTSP Remote Video Display — configuration
+#  Copy this file to config.yaml and fill in your values.
+# ============================================================
+
+# Unique identifier for this display device.
+# Used in MQTT topic paths:  rtsp_display/<device_id>/command|status|heartbeat
+device_id: rtsp_display_1
+
+# ------ MQTT broker ----------------------------------------
+mqtt:
+  host: 192.168.1.x          # IP or hostname of your MQTT broker
+  port: 1883
+  username: mqtt_user         # Remove or leave blank if no auth
+  password: mqtt_pass         # Remove or leave blank if no auth
+  base_topic: rtsp_display    # Root of all MQTT topics
+  heartbeat_interval: 30      # Seconds between heartbeat publishes
+
+# ------ Display settings -----------------------------------
+display:
+  fullscreen: true
+  background_color: "#0a0a0a"
+  accent_color: "#00d4ff"
+
+# ------ Feed / ffplay settings ----------------------------
+feeds:
+  rtsp_transport: tcp         # tcp (reliable) or udp (lower latency)
+  reconnect_delay: 5          # Seconds to wait before restarting a failed feed
+  stall_timeout: 30           # Seconds of no ffplay output before declaring a stall
+  ffplay_extra_args: []       # Extra flags passed directly to ffplay, e.g. ["-an"]
+
+# ------ Named presets (optional) ---------------------------
+# Trigger with:  {"action": "show_preset", "name": "front_cameras"}
+presets:
+
+  front_cameras:
+    layout: "2x2"
+    feeds:
+      - "rtsp://admin:password@192.168.1.101/stream1"
+      - "rtsp://admin:password@192.168.1.102/stream1"
+      - "rtsp://admin:password@192.168.1.103/stream1"
+      - "rtsp://admin:password@192.168.1.104/stream1"
+
+  main_entrance:
+    layout: "1x1"
+    feeds:
+      - "rtsp://admin:password@192.168.1.101/stream2"
