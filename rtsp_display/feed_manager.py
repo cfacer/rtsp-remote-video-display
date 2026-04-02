@@ -49,6 +49,7 @@ class FeedSlot:
         self.started_at: Optional[float] = None
 
         self._running: bool = False
+        self._stop_event = threading.Event()
         self._cap: Optional[cv2.VideoCapture] = None
         self._capture_thread: Optional[threading.Thread] = None
         self._latest_frame: Optional[Image.Image] = None
@@ -63,6 +64,7 @@ class FeedSlot:
 
     def start(self) -> None:
         self._running = True
+        self._stop_event.clear()
         self.started_at = time.time()
         self._set_status("starting")
         self._capture_thread = threading.Thread(
@@ -73,13 +75,10 @@ class FeedSlot:
 
     def stop(self) -> None:
         self._running = False
-        # Release the capture immediately to unblock any pending cap.read() call
-        if self._cap is not None:
-            try:
-                self._cap.release()
-            except Exception:
-                pass
-            self._cap = None
+        # Signal the capture thread to exit; it will release _cap from its own thread.
+        # Do NOT call cap.release() here — OpenCV is not thread-safe for concurrent
+        # release()/read() and will segfault (confirmed crash 2026-04-02).
+        self._stop_event.set()
         if self._after_id:
             try:
                 self.root.after_cancel(self._after_id)
@@ -120,7 +119,13 @@ class FeedSlot:
         # Configure RTSP transport for the OpenCV/FFMPEG backend
         os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = f"rtsp_transport;{rtsp_transport}"
 
-        while self._running:
+        # Cap the per-read timeout at 5 s so the thread wakes up and checks
+        # _stop_event promptly when stop() is called, without waiting the full
+        # stall_timeout.  Stall detection uses wall-clock elapsed time, so the
+        # shorter timeout here does not change the stall behaviour.
+        read_timeout_ms = min(5_000, int(stall_timeout * 1_000))
+
+        while not self._stop_event.is_set():
             try:
                 logger.info(
                     "Slot %d: opening %s", self.slot_id, redact_url(self.url)
@@ -128,7 +133,7 @@ class FeedSlot:
                 self._cap = cv2.VideoCapture(self.url, cv2.CAP_FFMPEG)
                 try:
                     self._cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 10_000)
-                    self._cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, int(stall_timeout * 1_000))
+                    self._cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, read_timeout_ms)
                 except Exception:
                     pass  # older OpenCV builds may not support these props
 
@@ -138,8 +143,10 @@ class FeedSlot:
                 self._set_status("playing")
                 last_frame_time = time.time()
 
-                while self._running:
+                while not self._stop_event.is_set():
                     ret, frame = self._cap.read()
+                    if self._stop_event.is_set():
+                        break
                     if not ret:
                         elapsed = time.time() - last_frame_time
                         if elapsed > stall_timeout:
@@ -156,20 +163,24 @@ class FeedSlot:
                     last_frame_time = time.time()
 
             except Exception as exc:
-                logger.warning("Slot %d: capture error: %s", self.slot_id, exc)
+                if not self._stop_event.is_set():
+                    logger.warning("Slot %d: capture error: %s", self.slot_id, exc)
             finally:
+                # Always release from within this thread — never from another thread.
                 if self._cap is not None:
                     self._cap.release()
                     self._cap = None
 
-            if self._running:
-                self.restart_count += 1
-                self._set_status("restarting")
-                logger.info(
-                    "Slot %d: reconnecting in %.0f s (attempt %d)…",
-                    self.slot_id, reconnect_delay, self.restart_count,
-                )
-                time.sleep(reconnect_delay)
+            if self._stop_event.is_set():
+                break
+            self.restart_count += 1
+            self._set_status("restarting")
+            logger.info(
+                "Slot %d: reconnecting in %.0f s (attempt %d)…",
+                self.slot_id, reconnect_delay, self.restart_count,
+            )
+            # Use wait() instead of sleep() so stop() can interrupt the delay
+            self._stop_event.wait(timeout=reconnect_delay)
 
     def _schedule_display(self) -> None:
         """Main-thread loop: renders the latest captured frame onto the Canvas."""
