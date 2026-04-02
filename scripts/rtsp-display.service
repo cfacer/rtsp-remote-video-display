@@ -22,9 +22,11 @@ Environment=PYTHONPATH={{INSTALL_DIR}}
 
 ExecStart=/usr/bin/python3 -m rtsp_display.main --config {{INSTALL_DIR}}/config.yaml
 
-# Restart automatically if the process crashes
-Restart=always
+# Restart on crash but not on clean exit (e.g. quit command / Ctrl+Q)
+Restart=on-failure
 RestartSec=10
+# Force-kill the process if it doesn't exit within 15 s (prevents accumulation)
+TimeoutStopSec=15
 
 # Write logs to stdout so journalctl -u rtsp-display picks them up
 StandardOutput=journal

@@ -49,6 +49,7 @@ class FeedSlot:
         self.started_at: Optional[float] = None
 
         self._running: bool = False
+        self._cap: Optional[cv2.VideoCapture] = None
         self._capture_thread: Optional[threading.Thread] = None
         self._latest_frame: Optional[Image.Image] = None
         self._frame_lock = threading.Lock()
@@ -72,6 +73,13 @@ class FeedSlot:
 
     def stop(self) -> None:
         self._running = False
+        # Release the capture immediately to unblock any pending cap.read() call
+        if self._cap is not None:
+            try:
+                self._cap.release()
+            except Exception:
+                pass
+            self._cap = None
         if self._after_id:
             try:
                 self.root.after_cancel(self._after_id)
@@ -113,26 +121,25 @@ class FeedSlot:
         os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = f"rtsp_transport;{rtsp_transport}"
 
         while self._running:
-            cap = None
             try:
                 logger.info(
                     "Slot %d: opening %s", self.slot_id, redact_url(self.url)
                 )
-                cap = cv2.VideoCapture(self.url, cv2.CAP_FFMPEG)
+                self._cap = cv2.VideoCapture(self.url, cv2.CAP_FFMPEG)
                 try:
-                    cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 10_000)
-                    cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, int(stall_timeout * 1_000))
+                    self._cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 10_000)
+                    self._cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, int(stall_timeout * 1_000))
                 except Exception:
                     pass  # older OpenCV builds may not support these props
 
-                if not cap.isOpened():
+                if not self._cap.isOpened():
                     raise RuntimeError("Failed to open RTSP stream")
 
                 self._set_status("playing")
                 last_frame_time = time.time()
 
                 while self._running:
-                    ret, frame = cap.read()
+                    ret, frame = self._cap.read()
                     if not ret:
                         elapsed = time.time() - last_frame_time
                         if elapsed > stall_timeout:
@@ -151,8 +158,9 @@ class FeedSlot:
             except Exception as exc:
                 logger.warning("Slot %d: capture error: %s", self.slot_id, exc)
             finally:
-                if cap is not None:
-                    cap.release()
+                if self._cap is not None:
+                    self._cap.release()
+                    self._cap = None
 
             if self._running:
                 self.restart_count += 1
