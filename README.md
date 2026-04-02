@@ -90,6 +90,11 @@ Each `FeedSlot` owns a `tk.Canvas` widget. A background thread reads RTSP frames
 { "action": "ping" }
 ```
 
+**Quit (clears feeds and exits the application)**
+```json
+{ "action": "quit" }
+```
+
 ### Status payload example
 ```json
 {
@@ -181,6 +186,13 @@ The service starts automatically on every boot.
 cd /path/to/rtsp-remote-video-display
 python3 -m rtsp_display.main --debug
 ```
+
+### Keyboard shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+Q` | Quit the application |
+| `Ctrl+C` | Quit the application |
 
 ---
 

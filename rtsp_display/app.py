@@ -57,6 +57,10 @@ class RTSPDisplayApp:
         # Suppress the default close button in kiosk mode
         self.root.protocol("WM_DELETE_WINDOW", self._noop_close)
 
+        # Keyboard exit shortcuts
+        self.root.bind("<Control-q>", lambda e: self._cmd_quit())
+        self.root.bind("<Control-c>", lambda e: self._cmd_quit())
+
         # ---- Animated logo ----
         self._logo = LogoAnimation(self.root, bg_color=bg, accent=accent)
         self._logo.show()
@@ -100,6 +104,7 @@ class RTSPDisplayApp:
             "show_preset":  self._cmd_show_preset,
             "clear":        self._cmd_clear,
             "ping":         self._cmd_ping,
+            "quit":         self._cmd_quit,
         }
         handler = dispatch.get(action)
         if handler:
@@ -192,6 +197,14 @@ class RTSPDisplayApp:
     def _cmd_ping(self, payload: Optional[dict] = None) -> None:
         """Respond to a ping with an immediate status update."""
         self._publish_status()
+
+    def _cmd_quit(self, payload: Optional[dict] = None) -> None:
+        """Clear all feeds and exit the application."""
+        logger.info("Quit requested — shutting down")
+        self._feeds.clear()
+        self._publish_status("offline")
+        self._mqtt.disconnect()
+        self.root.destroy()
 
     # ------------------------------------------------------------------
     # Layout / frame management
