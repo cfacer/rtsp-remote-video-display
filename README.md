@@ -138,10 +138,34 @@ mqtt:
 
 ### Prerequisites
 - Ubuntu 22.04 LTS (or 20.04)
-- Auto-login configured for your user (Settings → Users → Automatic Login)
 - Network access to MQTT broker and cameras
 
-### Install
+### 1. Enable auto-login
+
+The application requires a desktop session to be running. Configure the display machine to log in automatically:
+
+```bash
+# Open the Users settings panel
+gnome-control-center users
+```
+
+Unlock the panel, select the kiosk user, and toggle **Automatic Login** on. Alternatively, edit the GDM config directly:
+
+```bash
+sudo nano /etc/gdm3/custom.conf
+```
+
+Under `[daemon]`, set:
+```ini
+AutomaticLoginEnable=true
+AutomaticLogin=YOUR_USERNAME
+```
+
+Then reboot to confirm auto-login is working before proceeding.
+
+### 2. Install
+
+Log in as the kiosk user, then:
 
 ```bash
 git clone <your-repo-url> rtsp-remote-video-display
@@ -154,10 +178,10 @@ The installer will:
 2. Disable Wayland in GDM3 (forces X11 for reliable tkinter fullscreen)
 3. Install Python requirements
 4. Create `config.yaml` from the example
-5. Install and enable a systemd service
+5. Install and enable a systemd service (starts automatically on every boot)
 6. Create a desktop shortcut at `~/Desktop/rtsp-display.desktop`
 
-### Configure
+### 3. Configure
 
 ```bash
 cp .env.example .env
@@ -165,22 +189,38 @@ nano .env          # set MQTT_USER, MQTT_PASS, camera credentials
 nano config.yaml   # set mqtt.host, add presets
 ```
 
-### Run as a service
+### 4. Enable autostart on login
+
+The systemd service installed by `install.sh` starts the application automatically after every boot. Verify it is enabled:
+
+```bash
+sudo systemctl is-enabled rtsp-display
+# should output: enabled
+```
+
+If the service starts before the desktop session is fully ready, use the XDG autostart method instead — it launches the app as part of the desktop session:
+
+```bash
+mkdir -p ~/.config/autostart
+cp ~/Desktop/rtsp-display.desktop ~/.config/autostart/
+# Disable the systemd service to avoid running two instances
+sudo systemctl disable rtsp-display
+```
+
+The application will now launch automatically whenever the user's desktop session starts.
+
+### 5. Service management
 
 ```bash
 sudo systemctl start rtsp-display
+sudo systemctl stop rtsp-display
+sudo systemctl restart rtsp-display
 
 # View logs
 sudo journalctl -u rtsp-display -f
-
-# Stop / restart
-sudo systemctl stop rtsp-display
-sudo systemctl restart rtsp-display
 ```
 
-The service starts automatically on every boot.
-
-### Manual test run
+### 6. Manual test run
 
 ```bash
 cd /path/to/rtsp-remote-video-display
@@ -201,7 +241,6 @@ python3 -m rtsp_display.main --debug
 ### Prerequisites
 - Raspberry Pi 4 or 5 recommended (Pi 3 may struggle with 2×2 at high resolutions)
 - Raspberry Pi OS Bookworm **Desktop** (not Lite)
-- Auto-login and X11 mode enabled (see below)
 - Network access to MQTT broker and cameras
 
 ### 1. Enable auto-login and X11
@@ -222,7 +261,11 @@ Then reboot:
 sudo reboot
 ```
 
+Confirm the desktop loads automatically before proceeding.
+
 ### 2. Install
+
+Log in as the kiosk user, then:
 
 ```bash
 git clone <your-repo-url> rtsp-remote-video-display
@@ -240,22 +283,38 @@ nano .env          # set MQTT_USER, MQTT_PASS, camera credentials
 nano config.yaml   # set mqtt.host, add presets
 ```
 
-### 4. Run as a service
+### 4. Enable autostart on login
+
+The systemd service installed by `install.sh` starts the application automatically after every boot. Verify it is enabled:
+
+```bash
+sudo systemctl is-enabled rtsp-display
+# should output: enabled
+```
+
+If the service starts before the desktop session is fully ready (a common timing issue on Pi), use the XDG autostart method instead:
+
+```bash
+mkdir -p ~/.config/autostart
+cp ~/Desktop/rtsp-display.desktop ~/.config/autostart/
+# Disable the systemd service to avoid running two instances
+sudo systemctl disable rtsp-display
+```
+
+The application will now launch automatically whenever the desktop session starts.
+
+### 5. Service management
 
 ```bash
 sudo systemctl start rtsp-display
+sudo systemctl stop rtsp-display
+sudo systemctl restart rtsp-display
 
 # View logs
 sudo journalctl -u rtsp-display -f
-
-# Stop / restart
-sudo systemctl stop rtsp-display
-sudo systemctl restart rtsp-display
 ```
 
-The service starts automatically on every boot.
-
-### 5. Manual test run
+### 6. Manual test run
 
 ```bash
 cd /path/to/rtsp-remote-video-display
