@@ -98,7 +98,7 @@ Version=1.0
 Type=Application
 Name=RTSP Display
 Comment=Launch the RTSP Remote Video Display
-Exec=python3 -m rtsp_display.main --config $INSTALL_DIR/config.yaml
+Exec=env PYTHONPATH=$INSTALL_DIR python3 -m rtsp_display.main --config $INSTALL_DIR/config.yaml
 WorkingDirectory=$INSTALL_DIR
 Terminal=false
 Icon=video-display

@@ -12,6 +12,7 @@ A fullscreen RTSP camera viewer (kiosk) controlled entirely over MQTT, designed 
 ```bash
 pip3 install -r requirements.txt
 cp config.yaml.example config.yaml && cp .env.example .env
+# Must be run from the project root directory
 python3 -m rtsp_display.main --debug
 ```
 

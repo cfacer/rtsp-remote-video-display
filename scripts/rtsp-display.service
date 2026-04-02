@@ -18,6 +18,7 @@ WorkingDirectory={{INSTALL_DIR}}
 Environment=DISPLAY=:0
 Environment=GDK_BACKEND=x11
 Environment=XAUTHORITY={{HOME}}/.Xauthority
+Environment=PYTHONPATH={{INSTALL_DIR}}
 
 ExecStart=/usr/bin/python3 -m rtsp_display.main --config {{INSTALL_DIR}}/config.yaml
 

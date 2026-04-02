@@ -178,6 +178,7 @@ The service starts automatically on every boot.
 ### Manual test run
 
 ```bash
+cd /path/to/rtsp-remote-video-display
 python3 -m rtsp_display.main --debug
 ```
 
@@ -245,6 +246,7 @@ The service starts automatically on every boot.
 ### 5. Manual test run
 
 ```bash
+cd /path/to/rtsp-remote-video-display
 python3 -m rtsp_display.main --debug
 ```
 
