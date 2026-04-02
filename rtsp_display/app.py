@@ -57,6 +57,9 @@ class RTSPDisplayApp:
         # Suppress the default close button in kiosk mode
         self.root.protocol("WM_DELETE_WINDOW", self._noop_close)
 
+        # Hide the mouse cursor — fullscreen kiosk has no need for it
+        self.root.config(cursor="none")
+
         # Keyboard exit shortcuts
         self.root.bind("<Control-q>", lambda e: self._cmd_quit())
         self.root.bind("<Control-c>", lambda e: self._cmd_quit())
