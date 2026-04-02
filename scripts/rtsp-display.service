@@ -14,7 +14,7 @@ Type=simple
 User={{USER}}
 WorkingDirectory={{INSTALL_DIR}}
 
-# Force X11 so ffplay can embed into tkinter frames via -wid
+# Force X11 backend for reliable tkinter fullscreen rendering
 Environment=DISPLAY=:0
 Environment=GDK_BACKEND=x11
 Environment=XAUTHORITY={{HOME}}/.Xauthority

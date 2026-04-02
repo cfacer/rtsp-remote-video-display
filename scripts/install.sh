@@ -6,8 +6,8 @@
 #      bash scripts/install.sh
 #
 #  What it does:
-#    1. Installs system packages (ffmpeg, python3-tk, etc.)
-#    2. Forces X11 mode so ffplay can embed into tkinter frames
+#    1. Installs system packages (ffmpeg, python3-tk, opencv deps, etc.)
+#    2. Forces X11 mode for reliable tkinter fullscreen (Ubuntu/GDM3)
 #    3. Installs Python dependencies
 #    4. Copies config.yaml.example → config.yaml (if absent)
 #    5. Installs a systemd service that starts the app on login
@@ -48,8 +48,9 @@ sudo apt-get install -y \
     libglib2.0-0
 
 # ── 2. Force X11 (disable Wayland) ────────────────────────────
-# ffplay's -wid embedding requires X11.  If GDM3 is present we
-# disable Wayland there; the systemd unit also sets GDK_BACKEND=x11.
+# tkinter fullscreen requires X11.  If GDM3 is present we disable
+# Wayland there; the systemd unit also sets GDK_BACKEND=x11.
+# On Raspberry Pi, switch to X11 first via: sudo raspi-config
 GDMCONF="/etc/gdm3/custom.conf"
 if [ -f "$GDMCONF" ]; then
     echo "▶ Disabling Wayland in GDM3 (required for ffplay embedding)…"

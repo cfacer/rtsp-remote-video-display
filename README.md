@@ -1,6 +1,6 @@
 # RTSP Remote Video Display
 
-A fullscreen RTSP camera viewer controlled entirely over MQTT — designed to run headlessly on a dedicated Ubuntu display machine and integrate with Home Assistant automations.
+A fullscreen RTSP camera viewer controlled entirely over MQTT — designed to run headlessly on a dedicated display machine and integrate with Home Assistant automations.
 
 ---
 
@@ -8,11 +8,12 @@ A fullscreen RTSP camera viewer controlled entirely over MQTT — designed to ru
 
 - **Animated idle logo** — a camera-themed canvas animation plays when no feeds are active
 - **1×1 and 2×2 layouts** — switch between a single fullscreen feed and a 2×2 quad view via MQTT
-- **ffplay rendering** — leverages ffplay (part of ffmpeg) for hardware-accelerated RTSP decoding embedded directly into the application window
-- **Stall detection & auto-restart** — monitors feed activity; automatically restarts stalled or crashed streams
+- **OpenCV/PIL rendering** — RTSP frames are decoded by OpenCV and rendered directly into the tkinter window; no external subprocess windows
+- **Stall detection & auto-restart** — monitors feed activity; automatically reconnects stalled or dropped streams
 - **Named presets** — define camera groupings in config, trigger them with a single MQTT message
 - **MQTT status reporting** — publishes state, active feeds, uptime, and restart counts; Home Assistant can read and act on them
 - **Heartbeat** — regular MQTT ping so HA knows the display is alive
+- **Credential safety** — credentials stored in a gitignored `.env` file; never appear in logs or MQTT payloads
 
 ---
 
@@ -25,10 +26,10 @@ Home Assistant  ──MQTT──▶  MQTTClient  ──▶  RTSPDisplayApp  ─�
                                                                 │
                                                    ┌───────────┴───────────┐
                                                 FeedSlot 0           FeedSlot N
-                                               (ffplay -wid)        (ffplay -wid)
+                                              (OpenCV + PIL)       (OpenCV + PIL)
 ```
 
-The tkinter window owns the screen.  When feeds are requested, it creates a grid of `Frame` widgets, passes their X11 window IDs to `FeedManager`, and ffplay embeds into each frame via the `-wid` flag.
+Each `FeedSlot` owns a `tk.Canvas` widget. A background thread reads RTSP frames via `cv2.VideoCapture`; a `root.after()` loop on the main thread converts them to `ImageTk.PhotoImage` and paints them onto the canvas. Everything renders inside the single fullscreen tkinter window.
 
 ---
 
@@ -43,8 +44,6 @@ The tkinter window owns the screen.  When feeds are requested, it creates a grid
 | Publish | `rtsp_display/<device_id>/heartbeat` | Periodic ping |
 
 ### Commands
-
-All commands are JSON objects sent to the command topic.
 
 **Show one or more feeds**
 ```json
@@ -98,8 +97,8 @@ All commands are JSON objects sent to the command topic.
   "state": "playing",
   "layout": "2x2",
   "feeds": [
-    { "slot": 0, "url": "rtsp://...", "status": "playing", "restart_count": 0, "uptime_s": 320 },
-    { "slot": 1, "url": "rtsp://...", "status": "stalled", "restart_count": 2, "uptime_s": 12 }
+    { "slot": 0, "url": "rtsp://***:***@...", "status": "playing", "restart_count": 0, "uptime_s": 320 },
+    { "slot": 1, "url": "rtsp://***:***@...", "status": "stalled", "restart_count": 2, "uptime_s": 12 }
   ],
   "timestamp": 1711900800
 }
@@ -130,148 +129,51 @@ mqtt:
 
 ---
 
-## Mac Developer Setup (first time)
-
-### 1. Install Git
-
-Open **Terminal** and run:
-
-```bash
-git --version
-```
-
-If Git is not installed, macOS will offer to install the **Xcode Command Line Tools** — click Install and wait for it to complete.  Then run `git --version` again to confirm.
-
-### 2. Configure Git
-
-```bash
-git config --global user.name "Your Name"
-git config --global user.email "your@email.com"
-git config --global init.defaultBranch main
-```
-
-### 3. Generate an SSH key for GitHub
-
-```bash
-ssh-keygen -t ed25519 -C "your@email.com"
-# Press Enter to accept the default path (~/.ssh/id_ed25519)
-# Set a passphrase if you want extra security
-
-# Add the key to your SSH agent
-eval "$(ssh-agent -s)"
-ssh-add ~/.ssh/id_ed25519
-
-# Copy the public key to your clipboard
-cat ~/.ssh/id_ed25519.pub | pbcopy
-```
-
-### 4. Add the key to GitHub
-
-1. Go to **github.com → Settings → SSH and GPG keys → New SSH key**
-2. Give it a title (e.g. "MacBook") and paste the key
-3. Click **Add SSH key**
-
-Test the connection:
-```bash
-ssh -T git@github.com
-# Expected: "Hi <username>! You've successfully authenticated…"
-```
-
-### 5. Create the GitHub repository
-
-1. Go to **github.com → New repository**
-2. Name it `rtsp-remote-video-display`
-3. Set it to **Public** or **Private** as you prefer
-4. **Do not** add a README, .gitignore, or licence (the project includes its own)
-5. Click **Create repository**
-
-### 6. Clone and push the project
-
-```bash
-# Clone the empty repo
-git clone git@github.com:YOUR_USERNAME/rtsp-remote-video-display.git
-cd rtsp-remote-video-display
-
-# Copy the project files into this directory
-# (replace ~/Downloads/rtsp-remote-video-display with wherever you saved the files)
-cp -r ~/Downloads/rtsp-remote-video-display/. .
-
-# Initial commit
-git add .
-git commit -m "Initial commit: RTSP Remote Video Display v0.1.0"
-git push -u origin main
-```
-
-### 7. Mac development testing
-
-Install Python dependencies on your Mac:
-
-```bash
-pip3 install -r requirements.txt
-```
-
-> **Note:** `python3-tk` is included in the Python.org macOS installer.  If you installed Python via Homebrew run `brew install python-tk`.
-
-Copy the example config and edit it:
-
-```bash
-cp config.yaml.example config.yaml
-nano config.yaml   # set your MQTT broker IP
-```
-
-Run the app:
-
-```bash
-python3 -m rtsp_display.main --debug
-```
-
-On macOS, ffplay will open in its own floating window (the X11 embedding is Linux-only).  All MQTT logic, stall detection, and layout management work identically.
-
----
-
-## Ubuntu Display Machine Setup
+## Ubuntu Setup
 
 ### Prerequisites
 - Ubuntu 22.04 LTS (or 20.04)
-- Auto-login configured for your user
+- Auto-login configured for your user (Settings → Users → Automatic Login)
 - Network access to MQTT broker and cameras
 
-### Deploy from GitHub
+### Install
 
 ```bash
-# On the Ubuntu display machine:
-git clone git@github.com:YOUR_USERNAME/rtsp-remote-video-display.git
+git clone <your-repo-url> rtsp-remote-video-display
 cd rtsp-remote-video-display
-
-# Run the installer (must be run with sudo available)
 bash scripts/install.sh
 ```
 
 The installer will:
-1. Install `ffmpeg`, `python3-tk`, and other dependencies
-2. Disable Wayland (required for ffplay X11 embedding)
+1. Install system packages (`ffmpeg`, `python3-tk`, `python3-pil.imagetk`, `libgl1`, etc.)
+2. Disable Wayland in GDM3 (forces X11 for reliable tkinter fullscreen)
 3. Install Python requirements
 4. Create `config.yaml` from the example
 5. Install and enable a systemd service
+6. Create a desktop shortcut at `~/Desktop/rtsp-display.desktop`
 
 ### Configure
 
 ```bash
-nano config.yaml
-# Set:  mqtt.host, mqtt.username, mqtt.password
-# Add your camera presets under the presets: section
+cp .env.example .env
+nano .env          # set MQTT_USER, MQTT_PASS, camera credentials
+nano config.yaml   # set mqtt.host, add presets
 ```
 
-### Start the service
+### Run as a service
 
 ```bash
 sudo systemctl start rtsp-display
 
-# Check logs
+# View logs
 sudo journalctl -u rtsp-display -f
+
+# Stop / restart
+sudo systemctl stop rtsp-display
+sudo systemctl restart rtsp-display
 ```
 
-The service is set to start automatically after every boot.
+The service starts automatically on every boot.
 
 ### Manual test run
 
@@ -281,50 +183,159 @@ python3 -m rtsp_display.main --debug
 
 ---
 
-## Repository structure
+## Raspberry Pi Setup
 
+### Prerequisites
+- Raspberry Pi 4 or 5 recommended (Pi 3 may struggle with 2×2 at high resolutions)
+- Raspberry Pi OS Bookworm **Desktop** (not Lite)
+- Auto-login and X11 mode enabled (see below)
+- Network access to MQTT broker and cameras
+
+### 1. Enable auto-login and X11
+
+Open a terminal and run:
+
+```bash
+sudo raspi-config
 ```
-rtsp-remote-video-display/
-├── .github/
-│   └── workflows/lint.yml       # GitHub Actions CI
-├── rtsp_display/
-│   ├── __init__.py
-│   ├── main.py                  # Entry point / argument parsing
-│   ├── app.py                   # tkinter root, MQTT dispatch, layout management
-│   ├── logo.py                  # Animated idle logo (tkinter Canvas)
-│   ├── feed_manager.py          # ffplay subprocess management + stall detection
-│   ├── mqtt_client.py           # paho-mqtt wrapper, heartbeat, status publish
-│   └── config.py                # YAML config loader with defaults
-├── scripts/
-│   ├── install.sh               # Ubuntu one-shot installer
-│   └── rtsp-display.service     # systemd unit template
-├── .gitignore
-├── config.yaml.example          # Annotated config template (committed)
-├── config.yaml                  # Your config (git-ignored, create from example)
-└── requirements.txt
+
+Navigate to:
+- **System Options → Boot / Auto Login → Desktop Autologin**
+- **Advanced Options → Wayland → X11**
+
+Then reboot:
+
+```bash
+sudo reboot
 ```
+
+### 2. Install
+
+```bash
+git clone <your-repo-url> rtsp-remote-video-display
+cd rtsp-remote-video-display
+bash scripts/install.sh
+```
+
+The installer runs identically to Ubuntu. If GDM3 is not present (Pi uses LightDM), the Wayland step is skipped — that's fine since you already switched to X11 via `raspi-config`.
+
+### 3. Configure
+
+```bash
+cp .env.example .env
+nano .env          # set MQTT_USER, MQTT_PASS, camera credentials
+nano config.yaml   # set mqtt.host, add presets
+```
+
+### 4. Run as a service
+
+```bash
+sudo systemctl start rtsp-display
+
+# View logs
+sudo journalctl -u rtsp-display -f
+
+# Stop / restart
+sudo systemctl stop rtsp-display
+sudo systemctl restart rtsp-display
+```
+
+The service starts automatically on every boot.
+
+### 5. Manual test run
+
+```bash
+python3 -m rtsp_display.main --debug
+```
+
+### Performance notes
+
+| Hardware | 1×1 | 2×2 |
+|----------|-----|-----|
+| Pi 5 | Excellent | Excellent |
+| Pi 4 (4GB) | Excellent | Good |
+| Pi 4 (2GB) | Good | May drop frames at 1080p |
+| Pi 3 | Adequate at 720p | Not recommended |
+
+If feeds drop frames, lower the source stream resolution or set `rtsp_transport: udp` in `config.yaml` for lower latency.
 
 ---
 
-## Development workflow (after initial setup)
+## Configuration
+
+`config.yaml` (gitignored) is created from `config.yaml.example`. Key sections:
+
+```yaml
+device_id: rtsp_display_1
+
+mqtt:
+  host: 192.168.1.x
+  username: ${MQTT_USER}    # from .env
+  password: ${MQTT_PASS}    # from .env
+
+feeds:
+  rtsp_transport: tcp       # tcp or udp
+  reconnect_delay: 5
+  stall_timeout: 30
+
+presets:
+  front_cameras:
+    layout: "2x2"
+    feeds:
+      - "rtsp://${CAM1_USER}:${CAM1_PASS}@192.168.1.101/stream1"
+      - "rtsp://${CAM1_USER}:${CAM1_PASS}@192.168.1.102/stream1"
+```
+
+### Credentials
+
+Create `.env` next to `config.yaml` (gitignored):
+
+```
+MQTT_USER=mqtt_user
+MQTT_PASS=s3cr3t!
+CAM1_USER=admin
+CAM1_PASS=p@$$w0rd
+```
+
+See `.env.example` for a full template.
+
+---
+
+## Updating
 
 ```bash
-# Make changes on your Mac
-git add -p             # interactively stage your changes
-git commit -m "feat: add something"
-git push
-
-# On the Ubuntu machine — pull and restart
 git pull
 sudo systemctl restart rtsp-display
 ```
 
 ---
 
-## Roadmap / future work
+## Repository structure
 
-- Replace MQTT with native Home Assistant WebSocket API for richer integration
+```
+rtsp-remote-video-display/
+├── .github/
+│   └── workflows/lint.yml       # CI: flake8 linting
+├── rtsp_display/
+│   ├── main.py                  # Entry point / argument parsing
+│   ├── app.py                   # tkinter root, MQTT dispatch, layout management
+│   ├── logo.py                  # Animated idle logo (tkinter Canvas)
+│   ├── feed_manager.py          # OpenCV RTSP capture + PIL Canvas rendering
+│   ├── mqtt_client.py           # paho-mqtt wrapper, heartbeat, status publish
+│   ├── config.py                # YAML config loader with .env interpolation
+│   └── utils.py                 # Credential redaction helpers
+├── scripts/
+│   ├── install.sh               # One-shot installer (Ubuntu + Raspberry Pi)
+│   └── rtsp-display.service     # systemd unit template
+├── .env.example                 # Credential template (copy to .env)
+├── config.yaml.example          # Annotated config template (copy to config.yaml)
+└── requirements.txt
+```
+
+---
+
+## Roadmap
+
 - Add more layout options (1×2, 3×3)
-- GPU-accelerated decoding via ffplay `-vf` hwdec options
 - On-screen overlay (feed name, status indicator per slot)
 - Web UI for configuration

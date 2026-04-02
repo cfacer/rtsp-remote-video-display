@@ -8,10 +8,10 @@ A fullscreen RTSP camera viewer (kiosk) controlled entirely over MQTT, designed 
 
 ## Commands
 
-### Development (macOS)
+### Run
 ```bash
 pip3 install -r requirements.txt
-cp config.yaml.example config.yaml
+cp config.yaml.example config.yaml && cp .env.example .env
 python3 -m rtsp_display.main --debug
 ```
 
@@ -21,14 +21,14 @@ flake8 rtsp_display/ --count --select=E9,F63,F7,F82 --show-source --statistics
 flake8 rtsp_display/ --count --max-line-length=100 --statistics
 ```
 
-### Ubuntu Deployment
+### Ubuntu / Raspberry Pi Deployment
 ```bash
 bash scripts/install.sh          # one-shot install (packages, systemd service, desktop shortcut)
 sudo systemctl start rtsp-display
 sudo journalctl -u rtsp-display -f
 ```
 
-The installer creates `~/Desktop/rtsp-display.desktop` for manual launching and installs `libgl1`/`libglib2.0-0` required by `opencv-python`.
+The installer works on both Ubuntu and Raspberry Pi OS. It creates `~/Desktop/rtsp-display.desktop` for manual launching and installs `libgl1`/`libglib2.0-0` required by `opencv-python`. On Raspberry Pi, enable auto-login and switch to X11 via `sudo raspi-config` before running the installer.
 
 ## Architecture
 
