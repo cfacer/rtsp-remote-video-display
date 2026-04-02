@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 340" width="420" height="340">
+  <defs>
+    <rect id="card-bg" rx="12"/>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000000" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- Page background (HA dark theme) -->
+  <rect width="420" height="340" fill="#111111"/>
+
+  <!-- Card shadow -->
+  <rect x="20" y="16" width="380" height="308" rx="12" fill="#1c1c1c" filter="url(#shadow)"/>
+
+  <!-- Card -->
+  <rect x="20" y="16" width="380" height="308" rx="12" fill="#1c1c1c"/>
+
+  <!-- Card header -->
+  <text x="40" y="50" font-family="Roboto, Helvetica, Arial, sans-serif"
+        font-size="14" font-weight="500" fill="#e0e0e0">Camera Display</text>
+
+  <!-- State chip -->
+  <rect x="310" y="33" width="72" height="22" rx="11" fill="#1b3a1b"/>
+  <circle cx="323" cy="44" r="4" fill="#4caf50"/>
+  <text x="331" y="48" font-family="Roboto, Helvetica, Arial, sans-serif"
+        font-size="11" fill="#4caf50">playing</text>
+
+  <!-- Divider -->
+  <line x1="20" y1="66" x2="400" y2="66" stroke="#2a2a2a" stroke-width="1"/>
+
+  <!-- Section label: Presets -->
+  <text x="40" y="90" font-family="Roboto, Helvetica, Arial, sans-serif"
+        font-size="11" font-weight="500" fill="#888888" letter-spacing="0.5">PRESETS</text>
+
+  <!-- Button: Front Cameras -->
+  <rect x="40" y="100" width="160" height="44" rx="8" fill="#1e3a4a" stroke="#00d4ff" stroke-width="1"/>
+  <text x="120" y="117" text-anchor="middle" font-family="Roboto, Helvetica, Arial, sans-serif"
+        font-size="11" fill="#888888">show_preset</text>
+  <text x="120" y="133" text-anchor="middle" font-family="Roboto, Helvetica, Arial, sans-serif"
+        font-size="13" font-weight="500" fill="#00d4ff">Front Cameras</text>
+
+  <!-- Button: Main Entrance -->
+  <rect x="220" y="100" width="160" height="44" rx="8" fill="#1c1c1c" stroke="#444444" stroke-width="1"/>
+  <text x="300" y="117" text-anchor="middle" font-family="Roboto, Helvetica, Arial, sans-serif"
+        font-size="11" fill="#666666">show_preset</text>
+  <text x="300" y="133" text-anchor="middle" font-family="Roboto, Helvetica, Arial, sans-serif"
+        font-size="13" font-weight="500" fill="#b0b0b0">Main Entrance</text>
+
+  <!-- Section label: Layout -->
+  <text x="40" y="168" font-family="Roboto, Helvetica, Arial, sans-serif"
+        font-size="11" font-weight="500" fill="#888888" letter-spacing="0.5">LAYOUT</text>
+
+  <!-- Button: 1×1 -->
+  <rect x="40" y="178" width="80" height="38" rx="8" fill="#1c1c1c" stroke="#444444" stroke-width="1"/>
+  <text x="80" y="201" text-anchor="middle" font-family="Roboto, Helvetica, Arial, sans-serif"
+        font-size="13" font-weight="500" fill="#b0b0b0">1×1</text>
+
+  <!-- Button: 2×2 (active) -->
+  <rect x="140" y="178" width="80" height="38" rx="8" fill="#1e3a4a" stroke="#00d4ff" stroke-width="1"/>
+  <text x="180" y="201" text-anchor="middle" font-family="Roboto, Helvetica, Arial, sans-serif"
+        font-size="13" font-weight="500" fill="#00d4ff">2×2</text>
+
+  <!-- Section label: Controls -->
+  <text x="40" y="242" font-family="Roboto, Helvetica, Arial, sans-serif"
+        font-size="11" font-weight="500" fill="#888888" letter-spacing="0.5">CONTROLS</text>
+
+  <!-- Button: Ping -->
+  <rect x="40" y="252" width="80" height="38" rx="8" fill="#1c1c1c" stroke="#444444" stroke-width="1"/>
+  <text x="80" y="275" text-anchor="middle" font-family="Roboto, Helvetica, Arial, sans-serif"
+        font-size="13" font-weight="500" fill="#b0b0b0">Ping</text>
+
+  <!-- Button: Clear -->
+  <rect x="140" y="252" width="80" height="38" rx="8" fill="#1c1c1c" stroke="#444444" stroke-width="1"/>
+  <text x="180" y="275" text-anchor="middle" font-family="Roboto, Helvetica, Arial, sans-serif"
+        font-size="13" font-weight="500" fill="#b0b0b0">Clear</text>
+
+  <!-- Button: Quit (danger) -->
+  <rect x="240" y="252" width="80" height="38" rx="8" fill="#2a1414" stroke="#c0392b" stroke-width="1"/>
+  <text x="280" y="275" text-anchor="middle" font-family="Roboto, Helvetica, Arial, sans-serif"
+        font-size="13" font-weight="500" fill="#e74c3c">Quit</text>
+
+  <!-- Feed status row -->
+  <rect x="40" y="302" width="340" height="2" rx="1" fill="#2a2a2a"/>
+
+  <!-- Feed indicators -->
+  <circle cx="52" cy="320" r="5" fill="#4caf50"/>
+  <text x="62" y="324" font-family="Roboto, Helvetica, Arial, sans-serif"
+        font-size="10" fill="#777777">cam1  </text>
+  <circle cx="122" cy="320" r="5" fill="#4caf50"/>
+  <text x="132" y="324" font-family="Roboto, Helvetica, Arial, sans-serif"
+        font-size="10" fill="#777777">cam2  </text>
+  <circle cx="192" cy="320" r="5" fill="#ff9800"/>
+  <text x="202" y="324" font-family="Roboto, Helvetica, Arial, sans-serif"
+        font-size="10" fill="#777777">cam3  </text>
+  <circle cx="262" cy="320" r="5" fill="#4caf50"/>
+  <text x="272" y="324" font-family="Roboto, Helvetica, Arial, sans-serif"
+        font-size="10" fill="#777777">cam4</text>
+</svg>

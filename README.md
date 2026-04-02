@@ -4,6 +4,18 @@ A fullscreen RTSP camera viewer controlled entirely over MQTT — designed to ru
 
 ---
 
+## Screenshots
+
+**Idle logo** — shown when no feeds are active:
+
+![Idle logo mockup](docs/mockup-idle.svg)
+
+**Home Assistant dashboard** — control buttons and per-slot status:
+
+![Home Assistant dashboard mockup](docs/mockup-ha-dashboard.svg)
+
+---
+
 ## Features
 
 - **Animated idle logo** — a camera-themed canvas animation plays when no feeds are active
