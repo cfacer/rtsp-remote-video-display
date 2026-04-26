@@ -41,7 +41,7 @@ def main() -> None:
     )
 
     config = Config(args.config)
-    app = RTSPDisplayApp(config)
+    app = RTSPDisplayApp(config, config_path=args.config)
     app.run()
 
 

@@ -23,6 +23,7 @@ A fullscreen RTSP camera viewer controlled entirely over MQTT — designed to ru
 - **OpenCV/PIL rendering** — RTSP frames are decoded by OpenCV and rendered directly into the tkinter window; no external subprocess windows
 - **Stall detection & auto-restart** — monitors feed activity; automatically reconnects stalled or dropped streams
 - **Named presets** — define camera groupings in config, trigger them with a single MQTT message
+- **Web UI** — browser-based dashboard for managing presets and sending commands (see [Web UI](#web-ui))
 - **MQTT status reporting** — publishes state, active feeds, uptime, and restart counts; Home Assistant can read and act on them
 - **Heartbeat** — regular MQTT ping so HA knows the display is alive
 - **Credential safety** — credentials stored in a gitignored `.env` file; never appear in logs or MQTT payloads
@@ -34,7 +35,7 @@ A fullscreen RTSP camera viewer controlled entirely over MQTT — designed to ru
 ```
 Home Assistant  ──MQTT──▶  MQTTClient  ──▶  RTSPDisplayApp  ──▶  LogoAnimation
                                                     │
-                                                    └──▶  FeedManager
+Browser  ───────HTTP──▶  WebServer ───────────────┘└──▶  FeedManager
                                                                 │
                                                    ┌───────────┴───────────┐
                                                 FeedSlot 0           FeedSlot N
@@ -142,6 +143,52 @@ mqtt:
       name: "Display State"
       state_topic: rtsp_display/rtsp_display_1/status
       value_template: "{{ value_json.state }}"
+```
+
+---
+
+## Web UI
+
+The application includes an optional browser-based dashboard served directly from the display machine. It lets you manage presets and send commands from any device on your network — no MQTT client required.
+
+### Accessing the UI
+
+Open a browser and navigate to:
+
+```
+http://<display-ip>:8080
+```
+
+The UI auto-refreshes status every 3 seconds and preset list every 15 seconds.
+
+### What you can do
+
+| Feature | Description |
+|---------|-------------|
+| **Status panel** | Live state (playing/idle), layout, uptime, MQTT connection, per-slot feed status |
+| **Presets** | Create, edit, delete, and activate named presets |
+| **Quick controls** | Clear feeds (return to idle), ping |
+| **Save & Activate** | Save a preset and immediately push it to the display in one click |
+
+Preset changes are written directly to `config.yaml` and take effect on the next activation — no restart required.
+
+### Configuration
+
+The Web UI is enabled by default. To disable it or change the port, add the following to `config.yaml`:
+
+```yaml
+web:
+  enabled: true          # set to false to disable entirely
+  host: "0.0.0.0"        # listen on all interfaces
+  port: 8080             # change if 8080 conflicts with another service
+```
+
+### Firewall note
+
+If the display machine has a firewall (common on Ubuntu), open the port:
+
+```bash
+sudo ufw allow 8080/tcp
 ```
 
 ---
@@ -407,6 +454,7 @@ rtsp-remote-video-display/
 │   ├── logo.py                  # Animated idle logo (tkinter Canvas)
 │   ├── feed_manager.py          # OpenCV RTSP capture + PIL Canvas rendering
 │   ├── mqtt_client.py           # paho-mqtt wrapper, heartbeat, status publish
+│   ├── web_server.py            # Flask Web UI (preset editor, live controls)
 │   ├── config.py                # YAML config loader with .env interpolation
 │   └── utils.py                 # Credential redaction helpers
 ├── scripts/
@@ -423,4 +471,3 @@ rtsp-remote-video-display/
 
 - Add more layout options (1×2, 3×3)
 - On-screen overlay (feed name, status indicator per slot)
-- Web UI for configuration

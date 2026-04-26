@@ -28,6 +28,11 @@ DEFAULTS: dict = {
         "ffplay_extra_args": [],
     },
     "presets": {},
+    "web": {
+        "enabled": True,
+        "host": "0.0.0.0",
+        "port": 8080,
+    },
 }
 
 
