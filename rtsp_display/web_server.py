@@ -800,7 +800,10 @@ class WebServer:
 
         @app.route("/")
         def index():
-            return _HTML, 200, {"Content-Type": "text/html; charset=utf-8"}
+            return _HTML, 200, {
+                "Content-Type": "text/html; charset=utf-8",
+                "Cache-Control": "no-store",
+            }
 
         @app.route("/api/status")
         def api_status():
