@@ -555,10 +555,10 @@ function renderPresetList() {
     const p = presets[name];
     const active = currentPreset === name ? 'active' : '';
     return (
-      '<div class="preset-item ' + active + '" onclick="editPreset(\'' + esc(name) + '\')">' +
+      '<div class="preset-item ' + active + '" onclick="editPreset(\\'' + esc(name) + '\\')">' +
         '<span class="preset-name">' + esc(name) + '</span>' +
         '<span class="preset-layout">' + (p.layout || '?') + '</span>' +
-        '<button class="btn-icon" onclick="event.stopPropagation();activatePreset(\'' + esc(name) + '\')" title="Activate now">&#9654;</button>' +
+        '<button class="btn-icon" onclick="event.stopPropagation();activatePreset(\\'' + esc(name) + '\\')" title="Activate now">&#9654;</button>' +
       '</div>'
     );
   }).join('');
