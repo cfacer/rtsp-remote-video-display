@@ -781,10 +781,15 @@ class WebServer:
     # Public
     # ------------------------------------------------------------------
 
-    def start(self, host: str = "0.0.0.0", port: int = 8080) -> None:
-        """Start the Flask server in a daemon thread (returns immediately)."""
+    def start(self, host: str = "0.0.0.0", port: int = 8080, password: str = None) -> None:
+        """Start the Flask server in a daemon thread (returns immediately).
+
+        Args:
+            password: If set, all routes require HTTP Basic Auth with this password.
+                      Username is ignored — any value is accepted.
+        """
         try:
-            from flask import Flask, jsonify, request as flask_request
+            from flask import Flask, jsonify, request as flask_request, Response
         except ImportError:
             logger.error(
                 "Flask is not installed — WebUI disabled. "
@@ -797,6 +802,21 @@ class WebServer:
         # Silence Flask's request logs — the main app already has its own logger
         import logging as _logging
         _logging.getLogger("werkzeug").setLevel(_logging.WARNING)
+
+        if password:
+            import secrets
+
+            @app.before_request
+            def check_auth():
+                auth = flask_request.authorization
+                if not auth or not secrets.compare_digest(auth.password, password):
+                    return Response(
+                        "Authentication required.",
+                        401,
+                        {"WWW-Authenticate": 'Basic realm="RTSP Display"'},
+                    )
+
+            logger.info("WebUI password protection enabled")
 
         @app.route("/")
         def index():

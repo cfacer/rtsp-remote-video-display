@@ -93,9 +93,18 @@ class RTSPDisplayApp:
                 command_handler=self._handle_mqtt_command,
                 status_getter=self.get_status_dict,
             )
+            password = None
+            if self._config.get("web", "password_protected", default=False):
+                password = self._config.get("web", "webui_password") or None
+                if not password:
+                    logger.warning(
+                        "web.password_protected is true but webui_password is not set"
+                        " — WebUI is unprotected"
+                    )
             web.start(
                 host=self._config.get("web", "host", default="0.0.0.0"),
                 port=int(self._config.get("web", "port", default=8080)),
+                password=password,
             )
         self.root.mainloop()
         # Cleanup after mainloop exits
