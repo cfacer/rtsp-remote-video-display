@@ -23,6 +23,7 @@ A fullscreen RTSP camera viewer controlled entirely over MQTT — designed to ru
 - **OpenCV/PIL rendering** — RTSP frames are decoded by OpenCV and rendered directly into the tkinter window; no external subprocess windows
 - **Stall detection & auto-restart** — monitors feed activity; automatically reconnects stalled or dropped streams
 - **Named presets** — define camera groupings in config, trigger them with a single MQTT message
+- **Web UI** — browser-based dashboard for managing presets and sending commands (see [Web UI](#web-ui))
 - **MQTT status reporting** — publishes state, active feeds, uptime, and restart counts; Home Assistant can read and act on them
 - **Heartbeat** — regular MQTT ping so HA knows the display is alive
 - **Credential safety** — credentials stored in a gitignored `.env` file; never appear in logs or MQTT payloads
@@ -34,7 +35,7 @@ A fullscreen RTSP camera viewer controlled entirely over MQTT — designed to ru
 ```
 Home Assistant  ──MQTT──▶  MQTTClient  ──▶  RTSPDisplayApp  ──▶  LogoAnimation
                                                     │
-                                                    └──▶  FeedManager
+Browser  ───────HTTP──▶  WebServer ───────────────┘└──▶  FeedManager
                                                                 │
                                                    ┌───────────┴───────────┐
                                                 FeedSlot 0           FeedSlot N
@@ -113,11 +114,12 @@ Each `FeedSlot` owns a `tk.Canvas` widget. A background thread reads RTSP frames
   "device_id": "rtsp_display_1",
   "state": "playing",
   "layout": "2x2",
+  "mqtt_connected": true,
+  "uptime_s": 3820,
   "feeds": [
     { "slot": 0, "url": "rtsp://***:***@...", "status": "playing", "restart_count": 0, "uptime_s": 320 },
     { "slot": 1, "url": "rtsp://***:***@...", "status": "stalled", "restart_count": 2, "uptime_s": 12 }
-  ],
-  "timestamp": 1711900800
+  ]
 }
 ```
 
@@ -142,6 +144,64 @@ mqtt:
       name: "Display State"
       state_topic: rtsp_display/rtsp_display_1/status
       value_template: "{{ value_json.state }}"
+```
+
+---
+
+## Web UI
+
+The application includes an optional browser-based dashboard served directly from the display machine. It lets you manage presets and send commands from any device on your network — no MQTT client required.
+
+### Accessing the UI
+
+Open a browser and navigate to:
+
+```
+http://<display-ip>:8080
+```
+
+The UI auto-refreshes status every 3 seconds and preset list every 15 seconds.
+
+### What you can do
+
+| Feature | Description |
+|---------|-------------|
+| **Status panel** | Live state (playing/idle), layout, uptime, MQTT connection, per-slot feed status |
+| **Presets** | Create, edit, delete, and activate named presets |
+| **Quick controls** | Clear feeds (return to idle), ping |
+| **Save & Activate** | Save a preset and immediately push it to the display in one click |
+
+Preset changes are written directly to `config.yaml` and take effect on the next activation — no restart required.
+
+### Configuration
+
+The Web UI is enabled by default. Add the following to `config.yaml` to configure it:
+
+```yaml
+web:
+  enabled: true          # set to false to disable entirely
+  host: "0.0.0.0"        # listen on all interfaces
+  port: 8080             # change if 8080 conflicts with another service
+  password_protected: false
+  webui_password: ${WEBUI_PASSWORD}   # set WEBUI_PASSWORD in .env, then flip above to true
+```
+
+### Password protection
+
+When `password_protected: true`, every route requires HTTP Basic Auth. The browser will prompt for a username and password — the username is ignored, only the password is checked.
+
+1. Add `WEBUI_PASSWORD=your_password` to your `.env` file
+2. Set `password_protected: true` in `config.yaml`
+3. Restart the service
+
+> **Note:** Basic Auth sends credentials in base64 (not encrypted). Use this on a trusted local network. For remote access, place the UI behind a reverse proxy with TLS.
+
+### Firewall note
+
+If the display machine has a firewall (common on Ubuntu), open the port:
+
+```bash
+sudo ufw allow 8080/tcp
 ```
 
 ---
@@ -197,8 +257,8 @@ The installer will:
 
 ```bash
 cp .env.example .env
-nano .env          # set MQTT_USER, MQTT_PASS, camera credentials
-nano config.yaml   # set mqtt.host, add presets
+nano .env          # set MQTT credentials, camera credentials, WEBUI_PASSWORD
+nano config.yaml   # set mqtt.host, configure web UI, add presets
 ```
 
 ### 4. Enable autostart on login
@@ -291,8 +351,8 @@ The installer runs identically to Ubuntu. If GDM3 is not present (Pi uses LightD
 
 ```bash
 cp .env.example .env
-nano .env          # set MQTT_USER, MQTT_PASS, camera credentials
-nano config.yaml   # set mqtt.host, add presets
+nano .env          # set MQTT credentials, camera credentials, WEBUI_PASSWORD
+nano config.yaml   # set mqtt.host, configure web UI, add presets
 ```
 
 ### 4. Enable autostart on login
@@ -363,6 +423,13 @@ feeds:
   reconnect_delay: 5
   stall_timeout: 30
 
+web:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8080
+  password_protected: false
+  webui_password: ${WEBUI_PASSWORD}   # from .env
+
 presets:
   front_cameras:
     layout: "2x2"
@@ -380,6 +447,7 @@ MQTT_USER=mqtt_user
 MQTT_PASS=s3cr3t!
 CAM1_USER=admin
 CAM1_PASS=p@$$w0rd
+WEBUI_PASSWORD=changeme   # only needed when web.password_protected: true
 ```
 
 See `.env.example` for a full template.
@@ -407,6 +475,7 @@ rtsp-remote-video-display/
 │   ├── logo.py                  # Animated idle logo (tkinter Canvas)
 │   ├── feed_manager.py          # OpenCV RTSP capture + PIL Canvas rendering
 │   ├── mqtt_client.py           # paho-mqtt wrapper, heartbeat, status publish
+│   ├── web_server.py            # Flask Web UI (preset editor, live controls)
 │   ├── config.py                # YAML config loader with .env interpolation
 │   └── utils.py                 # Credential redaction helpers
 ├── scripts/
@@ -423,4 +492,3 @@ rtsp-remote-video-display/
 
 - Add more layout options (1×2, 3×3)
 - On-screen overlay (feed name, status indicator per slot)
-- Web UI for configuration

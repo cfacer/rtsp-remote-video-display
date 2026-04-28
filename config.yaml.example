@@ -42,6 +42,14 @@ feeds:
   stall_timeout: 30           # Seconds of no ffplay output before declaring a stall
   ffplay_extra_args: []       # Extra flags passed directly to ffplay, e.g. ["-an"]
 
+# ------ WebUI ----------------------------------------------
+web:
+  enabled: true
+  host: "0.0.0.0"   # Listen on all interfaces (accessible from your network)
+  port: 8080         # http://<display-ip>:8080
+  password_protected: false
+  webui_password: ${WEBUI_PASSWORD}   # set WEBUI_PASSWORD in .env, then flip above to true
+
 # ------ Named presets (optional) ---------------------------
 # Trigger with:  {"action": "show_preset", "name": "front_cameras"}
 presets:

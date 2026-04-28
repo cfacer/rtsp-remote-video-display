@@ -9,6 +9,7 @@ from rtsp_display.config import Config
 from rtsp_display.feed_manager import FeedManager
 from rtsp_display.logo import LogoAnimation
 from rtsp_display.mqtt_client import MQTTClient
+from rtsp_display.web_server import WebServer
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +35,9 @@ class RTSPDisplayApp:
 
     STATUS_INTERVAL_MS = 30_000  # publish status every 30 s
 
-    def __init__(self, config: Config) -> None:
+    def __init__(self, config: Config, config_path: str = "config.yaml") -> None:
         self._config = config
+        self._config_path = config_path
         self._current_layout: Optional[str] = None
         self._current_urls: List[str] = []
         self._feed_frames: List[tk.Frame] = []
@@ -85,6 +87,25 @@ class RTSPDisplayApp:
         logger.info("RTSP Remote Video Display starting up")
         self._mqtt.connect()
         self._schedule_status_publish()
+        if self._config.get("web", "enabled", default=True):
+            web = WebServer(
+                config_path=self._config_path,
+                command_handler=self._handle_mqtt_command,
+                status_getter=self.get_status_dict,
+            )
+            password = None
+            if self._config.get("web", "password_protected", default=False):
+                password = self._config.get("web", "webui_password") or None
+                if not password:
+                    logger.warning(
+                        "web.password_protected is true but webui_password is not set"
+                        " — WebUI is unprotected"
+                    )
+            web.start(
+                host=self._config.get("web", "host", default="0.0.0.0"),
+                port=int(self._config.get("web", "port", default=8080)),
+                password=password,
+            )
         self.root.mainloop()
         # Cleanup after mainloop exits
         self._feeds.clear()
@@ -291,6 +312,17 @@ class RTSPDisplayApp:
     # ------------------------------------------------------------------
     # Misc
     # ------------------------------------------------------------------
+
+    def get_status_dict(self) -> dict:
+        """Return a snapshot of current app state (called from the web server thread)."""
+        return {
+            "device_id": self._config.get("device_id", default="rtsp_display"),
+            "state": "playing" if self._feeds.is_active() else "idle",
+            "layout": self._current_layout,
+            "feeds": self._feeds.get_status(),
+            "uptime_s": int(time.time() - self._app_start),
+            "mqtt_connected": self._mqtt._connected,
+        }
 
     def _noop_close(self) -> None:
         """Ignore window close events — kiosk mode has no keyboard."""
