@@ -805,7 +805,9 @@ class WebServer:
         @app.route("/api/status")
         def api_status():
             try:
-                return jsonify(self._status_getter())
+                data = self._status_getter()
+                logger.debug("/api/status → %s", data.get("state"))
+                return jsonify(data)
             except Exception as exc:
                 logger.exception("Error in /api/status: %s", exc)
                 return jsonify({"error": str(exc)}), 500
@@ -849,13 +851,15 @@ class WebServer:
             self._command_handler(payload)
             return jsonify({"ok": True})
 
-        thread = threading.Thread(
-            target=lambda: app.run(host=host, port=port, use_reloader=False, threaded=True),
-            daemon=True,
-            name="web-server",
-        )
+        def _run():
+            try:
+                app.run(host=host, port=port, use_reloader=False, threaded=True)
+            except Exception as exc:
+                logger.exception("Flask server failed to start: %s", exc)
+
+        thread = threading.Thread(target=_run, daemon=True, name="web-server")
         thread.start()
-        logger.info("WebUI available at http://%s:%d", host, port)
+        logger.info("WebUI starting on http://%s:%d", host, port)
 
     # ------------------------------------------------------------------
     # Config I/O (raw YAML — preserves ${VAR} references)
