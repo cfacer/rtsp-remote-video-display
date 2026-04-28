@@ -114,11 +114,12 @@ Each `FeedSlot` owns a `tk.Canvas` widget. A background thread reads RTSP frames
   "device_id": "rtsp_display_1",
   "state": "playing",
   "layout": "2x2",
+  "mqtt_connected": true,
+  "uptime_s": 3820,
   "feeds": [
     { "slot": 0, "url": "rtsp://***:***@...", "status": "playing", "restart_count": 0, "uptime_s": 320 },
     { "slot": 1, "url": "rtsp://***:***@...", "status": "stalled", "restart_count": 2, "uptime_s": 12 }
-  ],
-  "timestamp": 1711900800
+  ]
 }
 ```
 
@@ -174,14 +175,26 @@ Preset changes are written directly to `config.yaml` and take effect on the next
 
 ### Configuration
 
-The Web UI is enabled by default. To disable it or change the port, add the following to `config.yaml`:
+The Web UI is enabled by default. Add the following to `config.yaml` to configure it:
 
 ```yaml
 web:
   enabled: true          # set to false to disable entirely
   host: "0.0.0.0"        # listen on all interfaces
   port: 8080             # change if 8080 conflicts with another service
+  password_protected: false
+  webui_password: ${WEBUI_PASSWORD}   # set WEBUI_PASSWORD in .env, then flip above to true
 ```
+
+### Password protection
+
+When `password_protected: true`, every route requires HTTP Basic Auth. The browser will prompt for a username and password — the username is ignored, only the password is checked.
+
+1. Add `WEBUI_PASSWORD=your_password` to your `.env` file
+2. Set `password_protected: true` in `config.yaml`
+3. Restart the service
+
+> **Note:** Basic Auth sends credentials in base64 (not encrypted). Use this on a trusted local network. For remote access, place the UI behind a reverse proxy with TLS.
 
 ### Firewall note
 
@@ -244,8 +257,8 @@ The installer will:
 
 ```bash
 cp .env.example .env
-nano .env          # set MQTT_USER, MQTT_PASS, camera credentials
-nano config.yaml   # set mqtt.host, add presets
+nano .env          # set MQTT credentials, camera credentials, WEBUI_PASSWORD
+nano config.yaml   # set mqtt.host, configure web UI, add presets
 ```
 
 ### 4. Enable autostart on login
@@ -338,8 +351,8 @@ The installer runs identically to Ubuntu. If GDM3 is not present (Pi uses LightD
 
 ```bash
 cp .env.example .env
-nano .env          # set MQTT_USER, MQTT_PASS, camera credentials
-nano config.yaml   # set mqtt.host, add presets
+nano .env          # set MQTT credentials, camera credentials, WEBUI_PASSWORD
+nano config.yaml   # set mqtt.host, configure web UI, add presets
 ```
 
 ### 4. Enable autostart on login
@@ -410,6 +423,13 @@ feeds:
   reconnect_delay: 5
   stall_timeout: 30
 
+web:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8080
+  password_protected: false
+  webui_password: ${WEBUI_PASSWORD}   # from .env
+
 presets:
   front_cameras:
     layout: "2x2"
@@ -427,6 +447,7 @@ MQTT_USER=mqtt_user
 MQTT_PASS=s3cr3t!
 CAM1_USER=admin
 CAM1_PASS=p@$$w0rd
+WEBUI_PASSWORD=changeme   # only needed when web.password_protected: true
 ```
 
 See `.env.example` for a full template.
