@@ -472,8 +472,21 @@ async function pollStatus() {
   try {
     const r = await fetch('/api/status');
     const s = await r.json();
-    renderStatus(s);
-  } catch (_) {}
+    if (s.error) {
+      showApiError('Status error: ' + s.error);
+    } else {
+      renderStatus(s);
+    }
+  } catch (e) {
+    showApiError('API unreachable');
+  }
+}
+
+function showApiError(msg) {
+  document.getElementById('state-dot').className = 'dot err';
+  document.getElementById('state-text').textContent = 'error';
+  document.getElementById('mqtt-dot').className = 'dot err';
+  document.getElementById('mqtt-text').textContent = msg;
 }
 
 function renderStatus(s) {
@@ -791,12 +804,20 @@ class WebServer:
 
         @app.route("/api/status")
         def api_status():
-            return jsonify(self._status_getter())
+            try:
+                return jsonify(self._status_getter())
+            except Exception as exc:
+                logger.exception("Error in /api/status: %s", exc)
+                return jsonify({"error": str(exc)}), 500
 
         @app.route("/api/presets", methods=["GET"])
         def api_presets_get():
-            cfg = self._read_config()
-            return jsonify(cfg.get("presets") or {})
+            try:
+                cfg = self._read_config()
+                return jsonify(cfg.get("presets") or {})
+            except Exception as exc:
+                logger.exception("Error in /api/presets: %s", exc)
+                return jsonify({"error": str(exc)}), 500
 
         @app.route("/api/presets/<name>", methods=["PUT"])
         def api_preset_put(name):
@@ -829,7 +850,7 @@ class WebServer:
             return jsonify({"ok": True})
 
         thread = threading.Thread(
-            target=lambda: app.run(host=host, port=port, use_reloader=False),
+            target=lambda: app.run(host=host, port=port, use_reloader=False, threaded=True),
             daemon=True,
             name="web-server",
         )
